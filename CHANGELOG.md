@@ -4,6 +4,8 @@ All notable user-visible changes to Peek are recorded here. The format follows [
 
 ## [Unreleased]
 
+## [0.18.1] - 2026-11-04
+
 ### Fixed
 
 - Page backends work with Docker Engine 29 and later. peekd asked for Engine API 1.43 on every call, which those engines refuse (`client version 1.43 is too old. Minimum supported API version is 1.44`), so peekd would not start with backends on. It now asks the engine's `/version` once and uses 1.43 or the engine's minimum, whichever is newer.

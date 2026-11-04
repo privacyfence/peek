@@ -169,6 +169,10 @@ Peek logs structured JSON to stderr. Set `PEEK_LOG_LEVEL=debug`, `info`, or `war
 
 Before upgrading, take a SQLite backup and confirm you know where uploaded object bytes live. Run the new binary against a staging copy of the data directory when changing storage, auth, retention, or database-related code. Security fixes and how to report a vulnerability: [SECURITY.md](../SECURITY.md).
 
+### v0.18.1
+
+Page backends work with Docker Engine 29 and later: peekd asks the engine's `/version` once and uses Engine API 1.43, or the engine's minimum when that is newer (Docker Engine 29 requires 1.44). No migration and no configuration change. A socket proxy in front of the engine should let `GET /version` through; without it peekd stays on 1.43 as before. A rollback to v0.18.0 brings back `client version 1.43 is too old` on Docker Engine 29 with backends on.
+
 ### v0.18.0
 
 Peek can now start fully configured from the environment: sign-in settings, admin emails and a provisioning key file. Settings set this way are locked on the Admin page, and SSO sign-in in the allowed email domain creates the account. No migration, and nothing changes unless you set the new variables; a rollback to v0.17.0 ignores them and unlocks the Admin page settings.
