@@ -28,8 +28,20 @@ type recorded struct {
 // recorded copy is appended to reqs.
 func fakeDocker(t *testing.T, handler func(w http.ResponseWriter, r *http.Request)) (*DockerRuntime, *[]recorded) {
 	t.Helper()
+	// An engine that accepts 1.24 and newer, so requests use minDockerAPIVersion.
+	return fakeDockerVersion(t, status(200, `{"ApiVersion":"1.51","MinAPIVersion":"1.24"}`), handler)
+}
+
+// fakeDockerVersion is fakeDocker whose unversioned /version answers with version; the
+// /version requests are not recorded.
+func fakeDockerVersion(t *testing.T, version, handler func(w http.ResponseWriter, r *http.Request)) (*DockerRuntime, *[]recorded) {
+	t.Helper()
 	var reqs []recorded
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/version" {
+			version(w, r)
+			return
+		}
 		body, _ := io.ReadAll(r.Body)
 		r.Body = io.NopCloser(strings.NewReader(string(body)))
 		reqs = append(reqs, recorded{r.Method, r.URL.EscapedPath(), r.URL.Query(), string(body), r.Header.Clone()})
@@ -430,3 +442,104 @@ func TestDemuxLogs(t *testing.T) {
 type errReader struct{}
 
 func (errReader) Read([]byte) (int, error) { return 0, errors.New("read failed") }
+
+func TestAPIVersionFollowsEngineMinimum(t *testing.T) {
+	// Docker Engine 29 refuses requests older than API 1.44.
+	versionCalls := 0
+	version := func(w http.ResponseWriter, _ *http.Request) {
+		versionCalls++
+		_, _ = io.WriteString(w, `{"ApiVersion":"1.52","MinAPIVersion":"1.44"}`)
+	}
+	rt, reqs := fakeDockerVersion(t, version, status(200, "OK"))
+	for range 3 {
+		if err := rt.Ping(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, r := range *reqs {
+		if r.Path != "/v1.44/_ping" {
+			t.Fatalf("request %+v", r)
+		}
+	}
+	if versionCalls != 1 {
+		t.Fatalf("/version asked %d times, want once", versionCalls)
+	}
+}
+
+func TestAPIVersionWithoutUsableAnswer(t *testing.T) {
+	for name, version := range map[string]func(http.ResponseWriter, *http.Request){
+		"error status": status(404, `{"message":"page not found"}`),
+		"bad json":     status(200, "not json"),
+		"no minimum":   status(200, `{"ApiVersion":"1.45"}`),
+		"bad minimum":  status(200, `{"MinAPIVersion":"latest"}`),
+	} {
+		t.Run(name, func(t *testing.T) {
+			calls := 0
+			counted := func(w http.ResponseWriter, r *http.Request) { calls++; version(w, r) }
+			rt, reqs := fakeDockerVersion(t, counted, status(200, "OK"))
+			for range 2 {
+				if err := rt.Ping(context.Background()); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if r := (*reqs)[0]; r.Path != "/v1.43/_ping" {
+				t.Fatalf("request %+v", r)
+			}
+			if calls != 1 {
+				t.Fatalf("/version asked %d times, want once (the answer is kept)", calls)
+			}
+		})
+	}
+}
+
+func TestAPIVersionAsksAgainWhenEngineUnreachable(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := ln.Addr().String()
+	_ = ln.Close()
+	rt, err := NewDockerRuntime("tcp://" + addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := rt.Ping(context.Background()); err == nil {
+		t.Fatal("ping to a closed port succeeded")
+	}
+	if rt.version != "" {
+		t.Fatalf("version %q kept although the engine never answered", rt.version)
+	}
+}
+
+func TestAPIVersionCancelledContext(t *testing.T) {
+	rt, _ := fakeDocker(t, status(200, "OK"))
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := rt.Ping(ctx); err == nil {
+		t.Fatal("ping with a cancelled context succeeded")
+	}
+	if rt.version != "" {
+		t.Fatalf("version %q kept from a cancelled request", rt.version)
+	}
+}
+
+func TestPickAPIVersion(t *testing.T) {
+	for engineMin, want := range map[string]string{
+		"1.24":  "1.43",
+		"1.43":  "1.43",
+		"1.44":  "1.44",
+		"1.100": "1.100",
+		"2.0":   "2.0",
+		"":      "1.43",
+		"1":     "1.43",
+		"1.x":   "1.43",
+		"-1.50": "1.43",
+	} {
+		if got := pickAPIVersion(engineMin); got != want {
+			t.Errorf("pickAPIVersion(%q) = %q, want %q", engineMin, got, want)
+		}
+	}
+	if newerAPIVersion("1.44", "bad") {
+		t.Error("a version is newer than an invalid one")
+	}
+}

@@ -13,11 +13,15 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
 const (
-	dockerAPIVersion = "v1.43"
+	// minDockerAPIVersion is the Engine API version Peek's requests are written for. An engine
+	// that no longer accepts it (Docker Engine 29 requires at least 1.44) is spoken to in its own
+	// minimum version instead; see apiVersion.
+	minDockerAPIVersion = "1.43"
 
 	maxLogBytes      = 1 << 20
 	maxAPIErrorBytes = 64 << 10
@@ -28,6 +32,9 @@ const (
 // over a unix socket or TCP.
 type DockerRuntime struct {
 	client *http.Client
+
+	mu      sync.Mutex
+	version string // path prefix such as "v1.44", settled by apiVersion
 }
 
 var _ Runtime = (*DockerRuntime)(nil)
@@ -68,7 +75,7 @@ func (d *DockerRuntime) do(ctx context.Context, method, path string, query url.V
 		}
 		reader = bytes.NewReader(b)
 	}
-	target := "http://docker/" + dockerAPIVersion + path
+	target := "http://docker/" + d.apiVersion(ctx) + path
 	if len(query) > 0 {
 		target += "?" + query.Encode()
 	}
@@ -91,6 +98,83 @@ func (d *DockerRuntime) do(ctx context.Context, method, path string, query url.V
 		return nil, decodeAPIError(resp)
 	}
 	return resp, nil
+}
+
+// apiVersion returns the version prefix for API paths. The first call asks the engine's
+// unversioned /version: requests then use minDockerAPIVersion, or the engine's MinAPIVersion
+// when that is newer. An engine that answers without a usable version (an error status, or a
+// socket proxy that does not forward /version) gets minDockerAPIVersion for good; when the
+// engine cannot be reached at all, minDockerAPIVersion is used and the next call asks again.
+func (d *DockerRuntime) apiVersion(ctx context.Context) string {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.version != "" {
+		return d.version
+	}
+	v, answered := d.negotiateVersion(ctx)
+	if answered {
+		d.version = "v" + v
+	}
+	return "v" + v
+}
+
+// negotiateVersion asks the engine for its API versions. answered is false only when no
+// HTTP response came back.
+func (d *DockerRuntime) negotiateVersion(ctx context.Context) (version string, answered bool) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://docker/version", nil)
+	if err != nil {
+		return minDockerAPIVersion, false
+	}
+	resp, err := d.client.Do(req)
+	if err != nil {
+		return minDockerAPIVersion, false
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode/100 != 2 {
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, maxAPIErrorBytes))
+		return minDockerAPIVersion, true
+	}
+	var info struct {
+		MinAPIVersion string `json:"MinAPIVersion"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, maxAPIErrorBytes)).Decode(&info); err != nil {
+		return minDockerAPIVersion, true
+	}
+	return pickAPIVersion(info.MinAPIVersion), true
+}
+
+// pickAPIVersion is minDockerAPIVersion, raised to engineMin when that is a newer version.
+func pickAPIVersion(engineMin string) string {
+	if newerAPIVersion(engineMin, minDockerAPIVersion) {
+		return engineMin
+	}
+	return minDockerAPIVersion
+}
+
+// newerAPIVersion reports whether a is a valid "major.minor" version newer than b.
+func newerAPIVersion(a, b string) bool {
+	am, an, ok := parseAPIVersion(a)
+	if !ok {
+		return false
+	}
+	bm, bn, ok := parseAPIVersion(b)
+	if !ok {
+		return false
+	}
+	return am > bm || (am == bm && an > bn)
+}
+
+func parseAPIVersion(v string) (major, minor int, ok bool) {
+	maj, min, found := strings.Cut(v, ".")
+	if !found {
+		return 0, 0, false
+	}
+	a, err1 := strconv.Atoi(maj)
+	b, err2 := strconv.Atoi(min)
+	if err1 != nil || err2 != nil || a < 0 || b < 0 {
+		return 0, 0, false
+	}
+	return a, b, true
 }
 
 func decodeAPIError(resp *http.Response) error {
