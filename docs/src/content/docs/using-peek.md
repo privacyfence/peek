@@ -86,7 +86,7 @@ const result = await res.json();
 
 The path starts with `/` and goes to the container; `GET`, `POST`, `PUT`, `PATCH` and `DELETE` are allowed, only the `content-type` and `accept` headers are sent, requests are limited to 1 MiB and responses to 8 MiB, and calls fail after 35 s. Viewers need the same access as to the page, and nothing changes for them. The page cannot use `peek.fetch` after a viewer has clicked a link that navigated the iframe away from it.
 
-The container listens on `$PORT` (default 8080) and has a writable `/data` volume; the rest of its filesystem is read-only. Peek sets `PORT`, `PEEK_BACKEND_TOKEN`, `PEEK_UPLOAD_ID` and `PEEK_VERSION`, and adds `X-Peek-Backend-Token` (the backend must reject requests without it), `X-Peek-Upload-Id`, `X-Peek-Version`, `X-Peek-Viewer` (a stable per-page id for the viewer's browser) and, on signed-in and restricted pages only, `X-Peek-User-Id` and `X-Peek-User-Email` to every request. Deleting a page deletes its data volume. See `examples/contact-form` in the repository for a complete backend.
+The container listens on `$PORT` (default 8080) and has a writable `/data` volume; the rest of its filesystem is read-only. Peek sets `PORT`, `PEEK_BACKEND_TOKEN`, `PEEK_UPLOAD_ID` and `PEEK_VERSION`, and adds `X-Peek-Backend-Token` (the backend must reject requests without it), `X-Peek-Upload-Id`, `X-Peek-Version`, `X-Peek-Viewer` (a stable per-page id for the viewer's browser) and, on signed-in and restricted pages only, `X-Peek-User-Id` and `X-Peek-User-Email` to every request. Deleting a page deletes its data volume. See `examples/random-number` in the repository for the smallest backend, explained line by line, and `examples/contact-form` for a complete one.
 
 ## Keep Filters In The Address Bar
 

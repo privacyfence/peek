@@ -17,7 +17,7 @@ updates:
         patterns: ["*"]
         update-types: [minor, patch]
   - package-ecosystem: docker
-    directories: [/, /examples/contact-form]
+    directories: [/, /examples/contact-form, /examples/random-number]
     schedule:
       interval: weekly
     groups:

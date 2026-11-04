@@ -71,6 +71,16 @@ jobs:
       - name: Example module tests
         working-directory: examples/contact-form
         run: go test ./...
+      - name: Random-number example smoke test
+        run: |
+          docker build -t peek-example-random:ci examples/random-number
+          docker run -d --name peek-example-random --read-only --cap-drop ALL \
+            --security-opt no-new-privileges:true --tmpfs /tmp \
+            -e PEEK_BACKEND_TOKEN=ci-token -p 127.0.0.1:18080:8080 peek-example-random:ci
+          trap 'docker logs peek-example-random; docker rm -f peek-example-random' EXIT
+          for _ in $(seq 1 30); do curl -fsS -o /dev/null -H 'X-Peek-Backend-Token: ci-token' http://127.0.0.1:18080/api/rand && break; sleep 1; done
+          curl -fsS -H 'X-Peek-Backend-Token: ci-token' http://127.0.0.1:18080/api/rand | grep -Eq '"random": "[0-9a-f]{32}"'
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18080/api/rand)" = 401
 
   docker:
     runs-on: ubuntu-latest

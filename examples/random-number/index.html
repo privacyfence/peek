@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Random number</title>
+<style>
+  body { font: 16px/1.5 system-ui, sans-serif; max-width: 32rem; margin: 2rem auto; padding: 0 1rem; }
+  button { padding: .5rem 1rem; font: inherit; }
+  #out { margin-top: 1rem; font: 1.25rem/1.4 ui-monospace, monospace; word-break: break-all; }
+</style>
+</head>
+<body>
+<h1>Random number</h1>
+<button id="go">Get a random number</button>
+<p id="out" role="status"></p>
+<script>
+  document.getElementById("go").addEventListener("click", async () => {
+    const out = document.getElementById("out");
+    out.textContent = "…";
+    try {
+      const res = await peek.fetch("/api/rand");
+      const body = await res.json();
+      out.textContent = res.ok ? body.random : "Error: " + (body.error || res.status);
+    } catch (e) {
+      out.textContent = "Error: " + e.message;
+    }
+  });
+</script>
+</body>
+</html>

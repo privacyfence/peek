@@ -67,6 +67,7 @@ Each suite, its exact command and the CI job that runs it:
 - staticcheck: `mise run staticcheck` (`build`).
 - Docker integration: `docker build -t peek-example-contact:ci examples/contact-form && PEEK_DOCKER_TEST=1 PEEK_DOCKER_TEST_IMAGE=peek-example-contact:ci go test -count=1 -run '^TestDockerIntegration' ./internal/backends` (`backend-integration`).
 - Example module: `cd examples/contact-form && go test ./...` (`backend-integration`).
+- Random-number example: builds `examples/random-number` and calls it under Peek's container hardening (`backend-integration`).
 - Binaries end-to-end: `mise run e2e` (`e2e`).
 - Browser: `pnpm install && pnpm e2e-browser` (`browser`; needs Chrome or Chromium, set `CHROME=` to point at it).
 - Docker image: `docker build -t peek:ci .` (`docker`).
