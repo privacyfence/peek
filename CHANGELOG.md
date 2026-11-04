@@ -4,6 +4,10 @@ All notable user-visible changes to Peek are recorded here. The format follows [
 
 ## [Unreleased]
 
+### Added
+
+- `examples/random-number`: a minimal page backend (one button, a Python server that returns `openssl rand -hex 16`) with a line-by-line walkthrough of the Dockerfile and the backend token.
+
 ## [0.18.1] - 2026-11-04
 
 ### Fixed

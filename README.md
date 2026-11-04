@@ -139,7 +139,7 @@ The container listens on `$PORT` (default 8080, change it with `--backend-port`)
 | `X-Peek-Viewer` | A stable per-page id for the viewer's browser (not shared between pages). |
 | `X-Peek-User-Id`, `X-Peek-User-Email` | The signed-in account, only on `signed-in` and `restricted` pages. Public-page backends never learn who a signed-in viewer is. |
 
-Backends need Docker or Podman and an admin who allows image prefixes on the Admin page. See [docs/operations.md](docs/operations.md#page-backends) for the operator setup and [examples/contact-form](examples/contact-form) for a complete backend that sends email and stores submissions.
+Backends need Docker or Podman and an admin who allows image prefixes on the Admin page. See [docs/operations.md](docs/operations.md#page-backends) for the operator setup and [examples/contact-form](examples/contact-form) for a complete backend that sends email and stores submissions, or [examples/random-number](examples/random-number) for the smallest one, explained line by line.
 
 ## CLI reference
 
