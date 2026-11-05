@@ -142,7 +142,7 @@ The container listens on `$PORT` (default 8080, change it with `--backend-port`)
 
 | Header | Meaning |
 | --- | --- |
-| `X-Peek-Backend-Token` | Equals `$PEEK_BACKEND_TOKEN`, unique per container start. The backend must reject requests without it; on a public page the backend is reachable by anyone, so it must check this itself. |
+| `X-Peek-Backend-Token` | Equals `$PEEK_BACKEND_TOKEN`, unique per container start. Peek adds this header to every call it relays, so it proves only that the call came through Peek. On a public page anyone can make that call through Peek, so the backend must do its own authorization for anything it should not serve to everyone. |
 | `X-Peek-Caller` | `browser` for calls from the page, `token` for API-token calls. |
 | `X-Peek-Upload-Id`, `X-Peek-Version` | The page and version that made the call. |
 | `X-Peek-Viewer` | A stable per-page id for the viewer's browser (not shared between pages). For token calls, a stable per-page id of the calling account. |
