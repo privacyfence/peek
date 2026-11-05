@@ -37,6 +37,14 @@ func cmdStats(args []string) error {
 			UA        string `json:"user_agent"`
 			Timestamp int64  `json:"visited_at"`
 		} `json:"recent"`
+		TokenCalls []struct {
+			Caller     string `json:"caller"`
+			Email      string `json:"email"`
+			Version    int    `json:"version"`
+			Calls      int64  `json:"calls"`
+			LastCallAt int64  `json:"last_call_at"`
+			LastStatus int    `json:"last_status"`
+		} `json:"token_calls"`
 	}
 	if err := c.getJSON("/api/uploads/"+seg+"/stats", &st); err != nil {
 		return err
@@ -55,6 +63,22 @@ func cmdStats(args []string) error {
 				name = "(anonymous)"
 			}
 			fmt.Printf("  %-20s  %-16s  %-20s  %s\n", t, name, truncate(v.IP, 20), truncate(v.UA, 40))
+		}
+	}
+	if len(st.TokenCalls) > 0 {
+		fmt.Println("\ntoken calls:")
+		fmt.Printf("  %-32s  %-7s  %-6s  %-16s  %s\n", "CALLER", "VERSION", "CALLS", "LAST CALL", "STATUS")
+		for _, tc := range st.TokenCalls {
+			who := tc.Email
+			if who == "" {
+				short := tc.Caller
+				if len(short) > 8 {
+					short = short[:8]
+				}
+				who = "caller " + short + "…"
+			}
+			when := time.Unix(tc.LastCallAt, 0).Format("2006-01-02 15:04")
+			fmt.Printf("  %-32s  %-7d  %-6d  %-16s  %d\n", who, tc.Version, tc.Calls, when, tc.LastStatus)
 		}
 	}
 	return nil

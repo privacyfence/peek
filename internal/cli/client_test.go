@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -232,5 +233,27 @@ func TestSaveConfigReportsChmodFailure(t *testing.T) {
 	}
 	if err := SaveConfig(&Config{Host: "h"}); err == nil {
 		t.Fatal("expected a chmod error")
+	}
+}
+
+func TestReqWith(t *testing.T) {
+	var gotAuth, gotCT, gotX string
+	var gotLen int64
+	var gotBody string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth, gotCT, gotX, gotLen = r.Header.Get("Authorization"), r.Header.Get("Content-Type"), r.Header.Get("Accept"), r.ContentLength
+		b, _ := io.ReadAll(r.Body)
+		gotBody = string(b)
+	}))
+	defer ts.Close()
+	c := &client{host: ts.URL, token: "tok"}
+	h := http.Header{"Content-Type": {"application/x-tar"}, "Accept": {"text/plain"}}
+	resp, err := c.reqWith(longHTTPClient, "PUT", "/x", strings.NewReader("hello"), 5, h)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if gotAuth != "Bearer tok" || gotCT != "application/x-tar" || gotX != "text/plain" || gotLen != 5 || gotBody != "hello" {
+		t.Fatalf("auth=%q ct=%q accept=%q len=%d body=%q", gotAuth, gotCT, gotX, gotLen, gotBody)
 	}
 }
