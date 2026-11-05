@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"time"
 )
 
@@ -22,7 +23,9 @@ type Runtime interface {
 	RemoveContainer(ctx context.Context, id string) error // force; a missing container is not an error
 	ListContainers(ctx context.Context, labels map[string]string) ([]ContainerInfo, error)
 	ContainerLogs(ctx context.Context, id string, tail int) ([]byte, error)
-	RemoveVolume(ctx context.Context, name string) error // a missing volume is not an error
+	RemoveVolume(ctx context.Context, name string) error                           // a missing volume is not an error
+	CopyFromContainer(ctx context.Context, id, path string) (io.ReadCloser, error) // tar stream of path, as GET /containers/{id}/archive sends it
+	CopyToContainer(ctx context.Context, id, path string, archive io.Reader) error // extracts a tar into path, keeping each entry's uid/gid
 }
 
 // ContainerSpec is what the manager asks for. The runtime adds the fixed

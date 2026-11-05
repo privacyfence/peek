@@ -85,6 +85,9 @@ type Manager struct {
 	mu      sync.Mutex
 	entries map[key]*entry
 	closed  bool
+	// dataBusy holds a channel, closed when the operation ends, for every page
+	// whose /data volume is being exported or imported.
+	dataBusy map[int64]chan struct{}
 
 	// orphans tracks goroutines that stop a container whose start outlived
 	// the caller that removed it; Close waits for them.
@@ -126,6 +129,7 @@ func NewManager(cfg Config) *Manager {
 		dial:     cfg.Dial,
 		now:      cfg.Now,
 		entries:  map[key]*entry{},
+		dataBusy: map[int64]chan struct{}{},
 	}
 	if m.limits == nil {
 		m.limits = func(context.Context) Limits { return Limits{} }
@@ -179,6 +183,10 @@ func (m *Manager) Ensure(ctx context.Context, spec Spec) (Endpoint, error) {
 		if m.closed {
 			m.mu.Unlock()
 			return Endpoint{}, errClosed
+		}
+		if m.dataBusy[spec.UploadID] != nil {
+			m.mu.Unlock()
+			return Endpoint{}, ErrDataBusy
 		}
 		e := m.entries[k]
 		if e != nil && e.image != spec.Image {
@@ -262,14 +270,8 @@ func (m *Manager) evictLocked(maxRunning int) []*entry {
 // start pulls, creates, starts and probes one backend container. On a failure
 // after the container was created, it removes the container.
 func (m *Manager) start(ctx context.Context, spec Spec) (string, Endpoint, error) {
-	exists, err := m.rt.ImageExists(ctx, spec.Image)
-	if err != nil {
-		return "", Endpoint{}, fmt.Errorf("inspect image %s: %w", spec.Image, err)
-	}
-	if !exists {
-		if err := m.rt.PullImage(ctx, spec.Image, spec.RegistryAuth); err != nil {
-			return "", Endpoint{}, err
-		}
+	if err := m.ensureImage(ctx, spec.Image, spec.RegistryAuth); err != nil {
+		return "", Endpoint{}, err
 	}
 	name := ContainerName(m.instance, spec.UploadID, spec.Version)
 	if err := m.rt.RemoveContainer(ctx, name); err != nil {
@@ -311,6 +313,18 @@ func (m *Manager) start(ctx context.Context, spec Spec) (string, Endpoint, error
 		return "", Endpoint{}, err
 	}
 	return id, Endpoint{URL: "http://" + net.JoinHostPort(ip, strconv.Itoa(spec.Port)), Token: token}, nil
+}
+
+// ensureImage pulls image when the engine does not have it.
+func (m *Manager) ensureImage(ctx context.Context, image, registryAuth string) error {
+	exists, err := m.rt.ImageExists(ctx, image)
+	if err != nil {
+		return fmt.Errorf("inspect image %s: %w", image, err)
+	}
+	if !exists {
+		return m.rt.PullImage(ctx, image, registryAuth)
+	}
+	return nil
 }
 
 // run starts a created container and waits until it accepts connections on
@@ -356,10 +370,20 @@ func (m *Manager) StopUpload(ctx context.Context, uploadID int64) error {
 	return m.stopMatching(ctx, "stopped", func(k key) bool { return k.uploadID == uploadID })
 }
 
-// RemoveUploadData stops a page's backends and deletes its /data volume.
+// RemoveUploadData stops a page's backends and deletes its /data volume. It
+// waits for a running data export or import of the page first, because the
+// helper container of that operation still mounts the volume.
 func (m *Manager) RemoveUploadData(ctx context.Context, uploadID int64) error {
+	release, err := m.waitData(ctx, uploadID)
+	if err != nil {
+		return err
+	}
+	defer release()
 	if err := m.StopUpload(ctx, uploadID); err != nil {
 		return err
+	}
+	if err := m.rt.RemoveContainer(ctx, DataHelperName(m.instance, uploadID)); err != nil {
+		return fmt.Errorf("remove data helper: %w", err)
 	}
 	return m.rt.RemoveVolume(ctx, VolumeName(m.instance, uploadID))
 }
