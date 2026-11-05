@@ -30,6 +30,7 @@ func DataHelperName(instance string, uploadID int64) string {
 // ValidateDataArchive reads a whole tar archive and returns an *ArchiveError for anything Peek does not import.
 func ValidateDataArchive(r io.Reader) error {
 	tr := tar.NewReader(r)
+	symlinks := map[string]bool{}
 	for {
 		h, err := tr.Next()
 		if err == io.EOF {
@@ -42,6 +43,9 @@ func ValidateDataArchive(r io.Reader) error {
 		if path.IsAbs(h.Name) || name == ".." || strings.HasPrefix(name, "../") {
 			return &ArchiveError{fmt.Sprintf("archive entry %q is outside /data", h.Name)}
 		}
+		if throughSymlink(symlinks, name) {
+			return &ArchiveError{fmt.Sprintf("archive entry %q passes through a symlink", h.Name)}
+		}
 		switch h.Typeflag {
 		case tar.TypeReg, tar.TypeDir:
 		case tar.TypeSymlink:
@@ -49,6 +53,10 @@ func ValidateDataArchive(r io.Reader) error {
 			if path.IsAbs(h.Linkname) || target == ".." || strings.HasPrefix(target, "../") {
 				return &ArchiveError{fmt.Sprintf("archive entry %q links outside /data", h.Name)}
 			}
+			if throughSymlink(symlinks, target) {
+				return &ArchiveError{fmt.Sprintf("archive entry %q links through another symlink", h.Name)}
+			}
+			symlinks[name] = true
 		default:
 			return &ArchiveError{fmt.Sprintf("archive entry %q is not a file, directory or symlink", h.Name)}
 		}
@@ -56,6 +64,16 @@ func ValidateDataArchive(r io.Reader) error {
 			return &ArchiveError{"not a valid tar archive"}
 		}
 	}
+}
+
+// throughSymlink reports whether p is, or lies below, an earlier symlink entry.
+func throughSymlink(symlinks map[string]bool, p string) bool {
+	for ; p != "." && p != "/" && p != ""; p = path.Dir(p) {
+		if symlinks[p] {
+			return true
+		}
+	}
+	return false
 }
 
 // claimData marks a page's data as busy. The returned func ends the operation.

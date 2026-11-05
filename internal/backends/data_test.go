@@ -107,6 +107,7 @@ func TestValidateDataArchive(t *testing.T) {
 		{"fifo", makeTar(t, 0, 0, tarEntry{Name: "f", Type: tar.TypeFifo}), `archive entry "f" is not a file, directory or symlink`},
 		{"symlink abs", makeTar(t, 0, 0, tarEntry{Name: "l", Type: tar.TypeSymlink, Linkname: "/etc"}), `archive entry "l" links outside /data`},
 		{"symlink up", makeTar(t, 0, 0, tarEntry{Name: "l", Type: tar.TypeSymlink, Linkname: "../../x"}), `archive entry "l" links outside /data`},
+		{"symlink chain", makeTar(t, 0, 0, tarEntry{Name: "d", Type: tar.TypeSymlink, Linkname: "."}, tarEntry{Name: "d/s", Type: tar.TypeSymlink, Linkname: ".."}), `archive entry "d/s" passes through a symlink`},
 		{"garbage", []byte(strings.Repeat("garbage!", 100)), "not a valid tar archive"},
 	}
 	for _, tc := range tests {
