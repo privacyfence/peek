@@ -91,6 +91,23 @@ CREATE TABLE IF NOT EXISTS provisioned_accounts (
 	UNIQUE (provisioner_id, account_id)
 );
 CREATE INDEX IF NOT EXISTS idx_provisioned_accounts_token ON provisioned_accounts(token_id);`},
+	{18, "backend_token_calls", `
+CREATE TABLE IF NOT EXISTS upload_backend_settings (
+	upload_id INTEGER PRIMARY KEY REFERENCES uploads(id) ON DELETE CASCADE,
+	allow_token_calls INTEGER NOT NULL DEFAULT 0,
+	updated_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS backend_token_calls (
+	upload_id INTEGER NOT NULL REFERENCES uploads(id) ON DELETE CASCADE,
+	version INTEGER NOT NULL,
+	account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+	calls INTEGER NOT NULL DEFAULT 0,
+	last_call_at INTEGER NOT NULL,
+	last_status INTEGER NOT NULL,
+	identified INTEGER NOT NULL DEFAULT 0,
+	PRIMARY KEY (upload_id, version, account_id)
+);
+CREATE INDEX IF NOT EXISTS idx_backend_token_calls_upload ON backend_token_calls(upload_id, last_call_at DESC);`},
 }
 
 func (s *Store) runMigrations() error {
