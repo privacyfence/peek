@@ -191,3 +191,14 @@ func TestSetCovEncryptedGetAllSettings(t *testing.T) {
 		t.Fatal("expected db error")
 	}
 }
+
+func TestMaxBackendDataImportSeeded(t *testing.T) {
+	ctx := context.Background()
+	store := setCovStore(t)
+	if err := initDefaultSettings(ctx, store, strings.Repeat("0", 64), 100, 200, 3, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := mustGetSetting(t, store, "max_backend_data_import"); got != "268435456" {
+		t.Fatalf("max_backend_data_import = %q", got)
+	}
+}
