@@ -344,3 +344,19 @@ func TestRevokeFileProvisionerRefused(t *testing.T) {
 		t.Fatal("flash message not shown")
 	}
 }
+
+func TestAdminLimitsBackendDataImport(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	admin := newAccountWithToken(t, s, "admin@example.test", "admin-limits-token", true)
+	rec := doRequest(t, s, http.MethodGet, "/admin", nil, asSession(s, admin.ID))
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "setting-max_backend_data_import") {
+		t.Fatalf("GET /admin = %d, limits row missing", rec.Code)
+	}
+	rec = dashboardPost(t, s, admin.ID, "/dashboard/settings", url.Values{"max_backend_data_import_mb": {"10"}}, true)
+	if rec.Code >= 400 {
+		t.Fatalf("save = %d: %s", rec.Code, rec.Body.String())
+	}
+	if got, _ := s.store.GetSetting(context.Background(), "max_backend_data_import"); got != "10485760" {
+		t.Fatalf("max_backend_data_import = %q", got)
+	}
+}

@@ -29,6 +29,7 @@ var settingsMeta = map[string]settingsRow{
 	"retention_days":              {Label: "Retention (days)", Description: "Auto-delete uploads older than this many days (0 = off)"},
 	"max_uploads_per_token":       {Label: "Max uploads per owner", Description: "Maximum number of uploads per account/token owner (0 = unlimited)"},
 	"max_storage_per_token":       {Label: "Max storage per owner (bytes)", Description: "Maximum total storage per account/token owner (0 = unlimited)"},
+	"max_backend_data_import":     {Label: "Max backend data import (bytes)", Description: "Largest /data archive an owner can import into a page backend"},
 	"storage":                     {Label: "Storage backend", Description: "file or s3 (requires restart to take effect)", IsStartup: true},
 	"s3_endpoint":                 {Label: "S3 endpoint URL", Description: "S3-compatible endpoint (e.g. https://<id>.r2.cloudflarestorage.com)"},
 	"s3_bucket":                   {Label: "S3 bucket", Description: "Bucket name for HTML file storage"},
@@ -147,7 +148,7 @@ func (s *Server) normalizeSettingValue(key, value string) (string, error) {
 		return normalizeBoolSetting(key, value)
 	}
 	switch key {
-	case "max_upload":
+	case "max_upload", "max_backend_data_import":
 		return normalizePositiveInt64Setting(key, value)
 	case "max_total_size", "max_storage_per_token":
 		return normalizeNonNegativeInt64Setting(key, value)
@@ -384,7 +385,7 @@ func dashboardMegabytesToBytes(key, value string) (string, error) {
 
 func dashboardSettingUsesMegabytes(key string) bool {
 	switch key {
-	case "max_upload", "max_total_size", "max_storage_per_token":
+	case "max_upload", "max_total_size", "max_storage_per_token", "max_backend_data_import":
 		return true
 	default:
 		return false
@@ -431,6 +432,7 @@ func dashboardSettingsPanel(raw map[string]string, locked map[string]string) web
 			dashboardMegabyteLimit(raw, "max_total_size", "maxTotalSize", "Total storage limit", "Cumulative storage across all uploads (0 = unlimited)", 0, maxInt64(102400, dashboardSettingMegabytes(raw, "max_total_size")), 1),
 			dashboardCountLimit(raw, "max_uploads_per_token", "maxUploadsPerOwner", "Max uploads per owner", "Maximum uploads per account/token owner (0 = unlimited)", "uploads", 0, maxInt64(1000, dashboardSettingInt64(raw, "max_uploads_per_token")), 1),
 			dashboardMegabyteLimit(raw, "max_storage_per_token", "maxStoragePerOwner", "Storage per owner", "Maximum storage per account/token owner (0 = unlimited)", 0, maxInt64(10240, dashboardSettingMegabytes(raw, "max_storage_per_token")), 1),
+			dashboardMegabyteLimit(raw, "max_backend_data_import", "maxBackendDataImport", "Backend data import", "Largest /data archive an owner can import into a page backend", 1, maxInt64(10240, dashboardSettingMegabytes(raw, "max_backend_data_import")), 1),
 			dashboardCountLimit(raw, "retention_days", "retentionDays", "Retention", "Auto-delete uploads older than this many days (0 = off)", "days", 0, maxInt64(365, dashboardSettingInt64(raw, "retention_days")), 1),
 		},
 	}

@@ -31,6 +31,9 @@ func bodyLimitExempt(r *http.Request) bool {
 		return true
 	}
 	seg := strings.Split(r.URL.EscapedPath(), "/") // "", "api", "uploads", slug, ...; escaped, as the mux matches it, so %2F in a slug cannot shift segments
+	if r.Method == http.MethodPut && len(seg) == 6 && seg[1] == "api" && seg[2] == "uploads" && seg[4] == "backend" && seg[5] == "data" {
+		return true // data import; the handler applies max_backend_data_import
+	}
 	// API-token backend relay; relayToBackend applies the 1 MiB limit.
 	return len(seg) >= 7 && seg[1] == "api" && seg[2] == "uploads" && seg[4] == "versions" && seg[6] == "svc"
 }

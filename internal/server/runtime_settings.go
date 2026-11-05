@@ -7,6 +7,9 @@ import (
 	"github.com/privacyfence/peek/internal/db"
 )
 
+// defaultBackendDataImportMax is the default for the max_backend_data_import setting.
+const defaultBackendDataImportMax int64 = 256 << 20
+
 func initDefaultSettings(ctx context.Context, store *db.Store, secret string, maxUpload, maxTotalSize int64, retentionDays int, s3Defaults map[string]string) error {
 	upsert := func(key, val string) error {
 		_, err := store.GetSetting(ctx, key)
@@ -28,6 +31,7 @@ func initDefaultSettings(ctx context.Context, store *db.Store, secret string, ma
 		"max_upload":                  strconv.FormatInt(maxUpload, 10),
 		"max_total_size":              strconv.FormatInt(maxTotalSize, 10),
 		"retention_days":              strconv.Itoa(retentionDays),
+		"max_backend_data_import":     strconv.FormatInt(defaultBackendDataImportMax, 10),
 	}
 	for k, v := range defaults {
 		if err := upsert(k, v); err != nil {

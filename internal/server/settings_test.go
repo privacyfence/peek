@@ -907,3 +907,24 @@ func TestGetSettingsShowsLockedBy(t *testing.T) {
 		t.Fatalf("panel locks = %+v", panel.Auth.Google.Enabled)
 	}
 }
+
+func TestMaxBackendDataImportSetting(t *testing.T) {
+	s, _ := newHandlerTestServer(t)
+	for _, tc := range []struct{ in, want, wantErr string }{
+		{"abc", "", "must be an integer"},
+		{"0", "", "positive integer"},
+		{"-1", "", "positive integer"},
+		{" 5 ", "5", ""},
+	} {
+		got, err := s.normalizeSettingValue("max_backend_data_import", tc.in)
+		if tc.wantErr != "" {
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Errorf("%q: got %q, %v, want error %q", tc.in, got, err, tc.wantErr)
+			}
+			continue
+		}
+		if err != nil || got != tc.want {
+			t.Errorf("%q: got %q, %v, want %q", tc.in, got, err, tc.want)
+		}
+	}
+}

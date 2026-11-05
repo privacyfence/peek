@@ -39,6 +39,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /api/uploads/{slug}/backend/env/{name}", s.authToken(s.handleUnsetBackendEnv))
 	mux.HandleFunc("POST /api/uploads/{slug}/backend/restart", s.authToken(s.handleRestartBackend))
 	mux.HandleFunc("PUT /api/uploads/{slug}/backend/token-calls", s.authToken(s.handleSetBackendTokenCalls))
+	mux.HandleFunc("GET /api/uploads/{slug}/backend/data", s.authToken(s.handleExportBackendData))
+	mux.HandleFunc("PUT /api/uploads/{slug}/backend/data", s.authToken(s.handleImportBackendData))
 	mux.HandleFunc("GET /api/uploads/{slug}/versions/{n}/svc/{path...}", s.authToken(s.handleBackendTokenCall))
 	mux.HandleFunc("POST /api/uploads/{slug}/versions/{n}/svc/{path...}", s.authToken(s.handleBackendTokenCall))
 	mux.HandleFunc("PUT /api/uploads/{slug}/versions/{n}/svc/{path...}", s.authToken(s.handleBackendTokenCall))

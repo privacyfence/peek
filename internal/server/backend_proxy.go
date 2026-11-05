@@ -135,6 +135,10 @@ func (s *Server) relayToBackend(w http.ResponseWriter, r *http.Request, u *model
 	if err == nil {
 		ep, err = s.backends.Ensure(r.Context(), spec)
 	}
+	if errors.Is(err, backends.ErrDataBusy) {
+		jsonError(w, http.StatusServiceUnavailable, "backend data is being exported or imported, try again shortly")
+		return 0, false
+	}
 	if err != nil {
 		slog.Error("backend start failed", "slug", u.Slug, "version", version, "err", err)
 		jsonError(w, http.StatusBadGateway, "backend failed to start")
