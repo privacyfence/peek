@@ -101,6 +101,7 @@ Admins can change these from the **Admin** page (the **Admin** button next to **
 | `backend_registry_server` | string | Registry host the credentials below apply to, such as `ghcr.io`. |
 | `backend_registry_username` | string | Username for pulling private backend images. |
 | `backend_registry_password` | secret string | Password or token for pulling private backend images. |
+| `max_backend_data_import` | integer bytes, at least 1 | Largest /data archive an owner can import into a page backend. Default 268435456 (256 MiB); shown in MB on the Admin Limits tab. |
 | `max_upload` | bytes | Maximum individual upload size. |
 | `max_total_size` | bytes | Server-wide storage cap; `0` means unlimited. |
 | `max_uploads_per_token` | count | Per-owner upload count cap; `0` means unlimited. |
@@ -153,12 +154,16 @@ Usage:
   peek revoke <slug> <email> [--group] remove a grant
   peek grants <slug>                   list grants on a page
   peek backend <slug>                  show backends and environment variable names
-  peek backend set <slug> <image> [--version <n>|latest] [--port <n>]
+  peek backend set <slug> <image> [--version <n>|latest] [--port <n>] [--allow-token-calls]
   peek backend remove <slug> [--version <n>|latest]
   peek backend env set <slug> <NAME> --value <v>|--value-stdin   set a backend environment variable
   peek backend env unset <slug> <NAME>
   peek backend restart <slug>          stop the backend so it restarts with new variables
   peek backend logs <slug> [--version <n>|latest] [--tail <n>]
+  peek backend token-calls on|off <slug>   allow or refuse API-token calls to the backend
+  peek backend call <slug> <path> [--method M] [--data <json|@file|->] [--version <n>|latest] [-H "Name: value"]   call the backend with your token
+  peek backend data export <slug> [-o <file>]   download the page's /data volume as a tar archive
+  peek backend data import <slug> <file> [--yes]   replace the page's /data volume with a tar archive
   peek stats <slug>
   peek versions <slug>                 list versions of one of your pages
   peek comments <slug> [--version <n>]  list comments (latest version by default)
@@ -198,7 +203,7 @@ Environment overrides:
 | `GET /api/uploads` | token | List your pages (admins see all). |
 | `DELETE /api/uploads/<slug>` | token | Delete a page (owner or admin). |
 | `POST /api/uploads/<slug>/visibility` | token | Change visibility. JSON body `{"visibility":"public\|signed-in\|restricted"}`. |
-| `GET /api/uploads/<slug>/stats` | token | View statistics for a page. |
+| `GET /api/uploads/<slug>/stats` | token | View statistics for a page; includes `token_calls`. |
 | `GET /api/uploads/<slug>/export` | token | Export all data for a page. |
 | `GET /api/uploads/<slug>/views` | page access | Total and unique view counts and a 7-day view histogram for a page. |
 | `GET /api/uploads/<slug>/events` | page access | Server-Sent Events stream of `version` events carrying the page's latest version number; the viewer uses it to reload when a new version is uploaded. |
@@ -228,12 +233,16 @@ Environment overrides:
 | `PUT /api/uploads/<slug>/backend/env/<NAME>` | token | Set a variable. JSON body `{"value":"..."}`; applies on the next container start. |
 | `DELETE /api/uploads/<slug>/backend/env/<NAME>` | token | Remove a variable. |
 | `POST /api/uploads/<slug>/backend/restart` | token | Stop the page's backends; they start again on the next request. |
+| `GET\|POST\|PUT\|PATCH\|DELETE /api/uploads/<slug>/versions/<n\|latest>/svc/<path>` | token | Relay to the version's backend for scripts and agents. Same access rule as `/svc`; needs token calls turned on for the page. |
+| `PUT /api/uploads/<slug>/backend/token-calls` | token | Turn token calls on or off (owner or admin). JSON body `{"enabled":true\|false}`. |
+| `GET /api/uploads/<slug>/backend/data` | token | Download the page's `/data` volume as a tar archive (owner or admin). Stops the page's backends first. |
+| `PUT /api/uploads/<slug>/backend/data` | token | Replace the page's `/data` volume with the tar archive in the body (owner or admin). Capped by `max_backend_data_import`. |
 | `POST\|GET /api/provisioners`, `DELETE /api/provisioners/<id>` | admin token | Admin: create (returns the key once), list and revoke provisioning keys. |
 | `GET /api/provisioning/self` | provisioning key | Provisioning key: the key holder's name and account count. |
 | `PUT /api/provisioning/accounts/<external_id>` | provisioning key | Provisioning key: create or adopt the account for an email. |
 | `POST /api/provisioning/accounts/<external_id>/token` | provisioning key | Provisioning key: mint the account's token, replacing the previous one. |
 | `DELETE /api/provisioning/accounts/<external_id>` | provisioning key | Provisioning key: release the account and revoke its token. |
-| `GET\|POST\|PUT\|PATCH\|DELETE /svc/<slug>/v/<n>/<path>` | page access | Relay to the version's backend; used by `peek.fetch`, not called directly. Same access check as the page, and requires the `X-Peek-Svc: 1` header. |
+| `GET\|POST\|PUT\|PATCH\|DELETE /svc/<slug>/v/<n>/<path>` | page access | Relay to the version's backend; used by `peek.fetch`, not called directly. Same access check as the page, and requires the `X-Peek-Svc: 1` header. Other clients use the token route. |
 
 ## Account Comment API
 

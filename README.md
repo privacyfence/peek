@@ -130,13 +130,22 @@ peek backend restart <slug>
 peek backend logs <slug>
 ```
 
+Scripts and agents can call the backend with an API token once the owner turns that on:
+
+```sh
+peek backend token-calls on <slug>
+peek backend call <slug> /api/items
+curl -H "Authorization: Bearer $PEEK_TOKEN" https://peek.example.com/api/uploads/<slug>/versions/latest/svc/api/items
+```
+
 The container listens on `$PORT` (default 8080, change it with `--backend-port`) and gets `/data`, a named volume that survives restarts and is deleted with the page. Besides the variables the owner sets, Peek sets `PORT`, `PEEK_BACKEND_TOKEN`, `PEEK_UPLOAD_ID` and `PEEK_VERSION`. Every relayed request carries these headers, and no cookies or `Authorization`:
 
 | Header | Meaning |
 | --- | --- |
-| `X-Peek-Backend-Token` | Equals `$PEEK_BACKEND_TOKEN`, unique per container start. The backend must reject requests without it. |
+| `X-Peek-Backend-Token` | Equals `$PEEK_BACKEND_TOKEN`, unique per container start. The backend must reject requests without it; on a public page the backend is reachable by anyone, so it must check this itself. |
+| `X-Peek-Caller` | `browser` for calls from the page, `token` for API-token calls. |
 | `X-Peek-Upload-Id`, `X-Peek-Version` | The page and version that made the call. |
-| `X-Peek-Viewer` | A stable per-page id for the viewer's browser (not shared between pages). |
+| `X-Peek-Viewer` | A stable per-page id for the viewer's browser (not shared between pages). For token calls, a stable per-page id of the calling account. |
 | `X-Peek-User-Id`, `X-Peek-User-Email` | The signed-in account, only on `signed-in` and `restricted` pages. Public-page backends never learn who a signed-in viewer is. |
 
 Backends need Docker or Podman and an admin who allows image prefixes on the Admin page. See [docs/operations.md](docs/operations.md#page-backends) for the operator setup and [examples/contact-form](examples/contact-form) for a complete backend that sends email and stores submissions, or [examples/random-number](examples/random-number) for the smallest one, explained line by line.
@@ -167,12 +176,16 @@ peek revoke <slug> <email> [--group]   remove a grant
 peek grants <slug>                     list grants on a page
 peek versions <slug>                   list versions of a page
 peek backend <slug>                    show a page's backends and variable names
-peek backend set <slug> <image> [--version <n>|latest] [--port <n>]
+peek backend set <slug> <image> [--version <n>|latest] [--port <n>] [--allow-token-calls]
 peek backend remove <slug> [--version <n>|latest]
 peek backend env set <slug> <NAME> --value <v>|--value-stdin
 peek backend env unset <slug> <NAME>
 peek backend restart <slug>            apply variable changes and restart the container
 peek backend logs <slug> [--version <n>|latest] [--tail <n>]
+peek backend token-calls on|off <slug>   allow or refuse API-token calls to the backend
+peek backend call <slug> <path> [--method M] [--data <json|@file|->] [--version <n>|latest] [-H "Name: value"]   call the backend with your token
+peek backend data export <slug> [-o <file>]   download the page's /data volume as a tar archive
+peek backend data import <slug> <file> [--yes]   replace the page's /data volume with a tar archive
 peek stats <slug>
 peek comments <slug> [--version <n>]   list comments (latest version by default)
 peek export <slug>                     export all data for an upload
@@ -251,7 +264,7 @@ To report a vulnerability, see [SECURITY.md](SECURITY.md); please do not open a 
 | Cross-origin attacks | Parent and iframe communicate only via `postMessage`. |
 | Bypassing page access | `/raw` requires a short-lived HMAC-signed view token bound to the HttpOnly visitor cookie, and re-checks page access on every load, so revoking a grant or changing visibility takes effect immediately. |
 | Backend container escapes or exhausts the host | Images must match an admin-allowed registry prefix. Every container gets fixed memory, CPU and PID limits, a read-only root filesystem (writable `/tmp` and `/data` only), all capabilities dropped, `no-new-privileges`, and no published ports. Page owners cannot choose mounts, privileges or network mode. The Docker socket is still root on the host; see [docs/operations.md](docs/operations.md#page-backends). |
-| Calling a backend around Peek | `/svc` runs the page's access check on every request, requires a custom `X-Peek-Svc` header (which forces a CORS preflight Peek never answers) and a same-origin `Sec-Fetch-Site`; the browser relay refuses `..` segments and stops relaying once the iframe has navigated away. Containers sit on a private network and require a per-container token (`X-Peek-Backend-Token`). |
+| Calling a backend around Peek | `/svc` runs the page's access check on every request, requires a custom `X-Peek-Svc` header (which forces a CORS preflight Peek never answers) and a same-origin `Sec-Fetch-Site`; the browser relay refuses `..` segments and stops relaying once the iframe has navigated away. API tokens reach a backend only through `/api/uploads/<slug>/versions/<n>/svc/`, under the same access check, only after the owner turned token calls on, and marked with `X-Peek-Caller: token`. Containers sit on a private network and require a per-container token (`X-Peek-Backend-Token`). |
 | Brute force / spam | Per-IP rate limits on login and comment posting, plus per-account sign-in failure limits. |
 | Malicious content | HTML sniffed, binaries rejected, configurable `MaxBytesReader`; non-upload requests are capped at 64 KiB. |
 | SSRF via S3 | S3 endpoints must use HTTPS and must not resolve to private, link-local or metadata addresses; `--s3-allow-private-endpoint` / `PEEK_S3_ALLOW_PRIVATE_ENDPOINT=true` lifts both, for MinIO or internal stores. |
