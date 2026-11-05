@@ -308,3 +308,98 @@ func TestAPICovViewsNotFound(t *testing.T) {
 		t.Fatalf("status = %d", rec.Code)
 	}
 }
+
+type statsTokenCall struct {
+	Caller     string  `json:"caller"`
+	Email      *string `json:"email"`
+	Version    int     `json:"version"`
+	Calls      int64   `json:"calls"`
+	LastCallAt int64   `json:"last_call_at"`
+	LastStatus int     `json:"last_status"`
+}
+
+func statsTokenCalls(t *testing.T, s *Server, slug, token string) ([]statsTokenCall, string) {
+	t.Helper()
+	body := apiCovStatus(t, s, http.MethodGet, "/api/uploads/"+slug+"/stats", token, "", http.StatusOK)
+	var out struct {
+		Calls []statsTokenCall `json:"token_calls"`
+	}
+	if err := json.Unmarshal([]byte(body), &out); err != nil {
+		t.Fatal(err)
+	}
+	return out.Calls, body
+}
+
+func TestStatsTokenCallsPseudonymous(t *testing.T) {
+	s, u, tok := apiCovFixture(t, "tc-pseudo")
+	caller := newAccountWithToken(t, s, "caller@example.test", "caller-token", false)
+	if err := s.store.RecordBackendTokenCall(context.Background(), u.ID, 1, caller.ID, 201, false); err != nil {
+		t.Fatal(err)
+	}
+	check := func() {
+		calls, body := statsTokenCalls(t, s, u.Slug, tok)
+		if len(calls) != 1 {
+			t.Fatalf("calls = %s", body)
+		}
+		c := calls[0]
+		if c.Caller != s.tokenCallerHash(u.ID, caller.ID) || c.Version != 1 || c.Calls != 1 || c.LastCallAt == 0 || c.LastStatus != 201 {
+			t.Fatalf("row = %+v", c)
+		}
+		if c.Email != nil || strings.Contains(body, `"email"`) || strings.Contains(body, "caller@example.test") {
+			t.Fatalf("email leaked: %s", body)
+		}
+	}
+	check()
+	if err := s.store.SetUploadVisibility(context.Background(), u.ID, "signed-in"); err != nil {
+		t.Fatal(err)
+	}
+	check()
+}
+
+func TestStatsTokenCallsIdentified(t *testing.T) {
+	s, u, tok := apiCovFixture(t, "tc-ident")
+	caller := newAccountWithToken(t, s, "caller@example.test", "caller-token", false)
+	if err := s.store.RecordBackendTokenCall(context.Background(), u.ID, 1, caller.ID, 200, true); err != nil {
+		t.Fatal(err)
+	}
+	calls, body := statsTokenCalls(t, s, u.Slug, tok)
+	if len(calls) != 1 || calls[0].Email == nil || *calls[0].Email != "caller@example.test" {
+		t.Fatalf("calls = %s", body)
+	}
+}
+
+func TestStatsTokenCallsAdminSeesEmail(t *testing.T) {
+	s, u, _ := apiCovFixture(t, "tc-admin")
+	newAccountWithToken(t, s, "admin@example.test", "admin-token", true)
+	caller := newAccountWithToken(t, s, "caller@example.test", "caller-token", false)
+	if err := s.store.RecordBackendTokenCall(context.Background(), u.ID, 1, caller.ID, 200, false); err != nil {
+		t.Fatal(err)
+	}
+	calls, body := statsTokenCalls(t, s, u.Slug, "admin-token")
+	if len(calls) != 1 || calls[0].Email == nil || *calls[0].Email != "caller@example.test" {
+		t.Fatalf("calls = %s", body)
+	}
+}
+
+func TestStatsTokenCallsEmpty(t *testing.T) {
+	s, u, tok := apiCovFixture(t, "tc-empty")
+	if err := s.store.RecordVisit(context.Background(), u.ID, 1, "cookie-1", "Visitor", "10.0.0.1", "ua"); err != nil {
+		t.Fatal(err)
+	}
+	body := apiCovStatus(t, s, http.MethodGet, "/api/uploads/tc-empty/stats", tok, "", http.StatusOK)
+	if !strings.Contains(body, `"token_calls":[]`) || !strings.Contains(body, `"total_visits":1`) ||
+		!strings.Contains(body, `"unique_visitors":1`) || !strings.Contains(body, `"name":"Visitor"`) {
+		t.Fatalf("body = %s", body)
+	}
+}
+
+func TestStatsTokenCallsDBError(t *testing.T) {
+	s, _, tok := apiCovFixture(t, "tc-dberr")
+	if _, err := s.store.Exec(`DROP TABLE backend_token_calls`); err != nil {
+		t.Fatal(err)
+	}
+	body := apiCovStatus(t, s, http.MethodGet, "/api/uploads/tc-dberr/stats", tok, "", http.StatusInternalServerError)
+	if !strings.Contains(body, "db error") {
+		t.Fatalf("body = %s", body)
+	}
+}
