@@ -73,6 +73,10 @@ type client struct {
 
 var httpClient = &http.Client{Timeout: 30 * time.Second}
 
+// longHTTPClient has no overall timeout: backend calls (cold starts) and /data transfers
+// can outlast httpClient's 30 s, and the server bounds both itself.
+var longHTTPClient = &http.Client{}
+
 func newClient(cfg *Config) (*client, error) {
 	host := envOr("PEEK_HOST", cfg.Host)
 	token := envOr("PEEK_TOKEN", cfg.Token)
@@ -95,6 +99,29 @@ func (c *client) req(method, path string, body io.Reader, ct string) (*http.Resp
 		req.Header.Set("Content-Type", ct)
 	}
 	return httpClient.Do(req)
+}
+
+// reqWith sends one request through hc with the bearer token. size is the body length
+// (-1 when unknown); header values are set on the request.
+func (c *client) reqWith(hc *http.Client, method, path string, body io.Reader, size int64, header http.Header) (*http.Response, error) {
+	req, err := http.NewRequest(method, c.host+path, body)
+	if err != nil {
+		return nil, err
+	}
+	if size >= 0 {
+		req.ContentLength = size
+	}
+	req.Header.Set("Authorization", "Bearer "+c.token)
+	for k, vs := range header {
+		for i, v := range vs {
+			if i == 0 {
+				req.Header.Set(k, v)
+			} else {
+				req.Header.Add(k, v)
+			}
+		}
+	}
+	return hc.Do(req)
 }
 
 func (c *client) getJSON(path string, out any) error {

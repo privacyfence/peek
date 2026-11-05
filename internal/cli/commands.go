@@ -127,12 +127,16 @@ Usage:
   peek revoke <slug> <email> [--group] remove a grant
   peek grants <slug>                   list grants on a page
   peek backend <slug>                  show backends and environment variable names
-  peek backend set <slug> <image> [--version <n>|latest] [--port <n>]
+  peek backend set <slug> <image> [--version <n>|latest] [--port <n>] [--allow-token-calls]
   peek backend remove <slug> [--version <n>|latest]
   peek backend env set <slug> <NAME> --value <v>|--value-stdin   set a backend environment variable
   peek backend env unset <slug> <NAME>
   peek backend restart <slug>          stop the backend so it restarts with new variables
   peek backend logs <slug> [--version <n>|latest] [--tail <n>]
+  peek backend token-calls on|off <slug>   allow or refuse API-token calls to the backend
+  peek backend call <slug> <path> [--method M] [--data <json|@file|->] [--version <n>|latest] [-H "Name: value"]   call the backend with your token
+  peek backend data export <slug> [-o <file>]   download the page's /data volume as a tar archive
+  peek backend data import <slug> <file> [--yes]   replace the page's /data volume with a tar archive
   peek stats <slug>
   peek versions <slug>                 list versions of one of your pages
   peek comments <slug> [--version <n>]  list comments (latest version by default)
