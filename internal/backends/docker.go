@@ -68,12 +68,18 @@ func NewDockerRuntime(host string) (*DockerRuntime, error) {
 // Other statuses are returned as *APIError and the body is closed.
 func (d *DockerRuntime) do(ctx context.Context, method, path string, query url.Values, body any, header http.Header) (*http.Response, error) {
 	var reader io.Reader
-	if body != nil {
-		b, err := json.Marshal(body)
+	jsonBody := false
+	switch b := body.(type) {
+	case nil:
+	case io.Reader:
+		reader = b
+	default:
+		enc, err := json.Marshal(body)
 		if err != nil {
 			return nil, err
 		}
-		reader = bytes.NewReader(b)
+		reader = bytes.NewReader(enc)
+		jsonBody = true
 	}
 	target := "http://docker/" + d.apiVersion(ctx) + path
 	if len(query) > 0 {
@@ -83,7 +89,7 @@ func (d *DockerRuntime) do(ctx context.Context, method, path string, query url.V
 	if err != nil {
 		return nil, err
 	}
-	if body != nil {
+	if jsonBody {
 		req.Header.Set("Content-Type", "application/json")
 	}
 	for k, v := range header {
@@ -471,4 +477,24 @@ func demuxLogs(r io.Reader, limit int) ([]byte, error) {
 
 func (d *DockerRuntime) RemoveVolume(ctx context.Context, name string) error {
 	return d.callIgnoring(ctx, http.MethodDelete, "/volumes/"+url.PathEscape(name), nil, http.StatusNotFound)
+}
+
+// CopyFromContainer returns the tar stream of path inside the container. The caller closes it.
+func (d *DockerRuntime) CopyFromContainer(ctx context.Context, id, path string) (io.ReadCloser, error) {
+	resp, err := d.do(ctx, http.MethodGet, "/containers/"+url.PathEscape(id)+"/archive", url.Values{"path": {path}}, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	return resp.Body, nil
+}
+
+// CopyToContainer extracts a tar archive into path. The query carries no copyUIDGID, so the
+// Engine keeps the uid/gid of each tar header.
+func (d *DockerRuntime) CopyToContainer(ctx context.Context, id, path string, archive io.Reader) error {
+	resp, err := d.do(ctx, http.MethodPut, "/containers/"+url.PathEscape(id)+"/archive", url.Values{"path": {path}}, archive, http.Header{"Content-Type": {"application/x-tar"}})
+	if err != nil {
+		return err
+	}
+	_, _ = io.Copy(io.Discard, resp.Body)
+	return resp.Body.Close()
 }

@@ -7,6 +7,16 @@ import (
 	"github.com/privacyfence/peek/internal/models"
 )
 
+// tokenCallRow is one API-token call counter in the stats response.
+type tokenCallRow struct {
+	Caller     string `json:"caller"` // the X-Peek-Viewer the backend received
+	Email      string `json:"email,omitempty"`
+	Version    int    `json:"version"`
+	Calls      int64  `json:"calls"`
+	LastCallAt int64  `json:"last_call_at"` // unix seconds
+	LastStatus int    `json:"last_status"`
+}
+
 func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 	owner, ok := requireAPIToken(w, r)
 	if !ok {
@@ -32,6 +42,11 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusInternalServerError, "db error")
 		return
 	}
+	calls, err := s.store.ListBackendTokenCalls(r.Context(), u.ID, 100)
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, "db error")
+		return
+	}
 	type vrow struct {
 		Name      string `json:"name"`
 		IP        string `json:"ip"`
@@ -42,12 +57,25 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 	for _, v := range recent {
 		rows = append(rows, vrow{Name: v.VisitorName, IP: v.IP, UA: v.UserAgent, Timestamp: v.VisitedAt.Unix()})
 	}
+	callRows := make([]tokenCallRow, 0, len(calls))
+	for _, c := range calls {
+		row := tokenCallRow{
+			Caller: s.tokenCallerHash(u.ID, c.AccountID), Version: c.Version, Calls: c.Calls,
+			LastCallAt: c.LastCallAt.Unix(), LastStatus: c.LastStatus,
+		}
+		// The email is shown under the identity-header rule: only when the backend already got it, or to admins.
+		if c.Identified || owner.IsAdmin {
+			row.Email = c.Email
+		}
+		callRows = append(callRows, row)
+	}
 	jsonOK(w, map[string]any{
 		"slug":            slug,
 		"name":            u.Name,
 		"total_visits":    total,
 		"unique_visitors": unique,
 		"recent":          rows,
+		"token_calls":     callRows,
 	})
 }
 

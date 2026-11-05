@@ -2,8 +2,11 @@
 package backendstest
 
 import (
+	"archive/tar"
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"maps"
 	"net/http"
 	"sync"
@@ -37,6 +40,19 @@ type FakeRuntime struct {
 	Removed []string
 	// VolumesRemoved lists every name passed to RemoveVolume.
 	VolumesRemoved []string
+	// Volumes holds, per volume name, the tar stream CopyFromContainer returns
+	// for a container mounting that volume, entries prefixed "data/" as the
+	// Engine sends them. A volume without an entry yields a tar with a single
+	// "data/" directory entry owned by DataUID/DataGID.
+	Volumes map[string][]byte
+	// DataUID and DataGID own the default "data/" entry.
+	DataUID, DataGID int
+	// Imported holds, per volume name, the bytes the last CopyToContainer received.
+	Imported map[string][]byte
+	// Calls lists every runtime call in order: "create <name>", "start <id>",
+	// "stop <id>", "rmctr <id-or-name>", "rmvol <name>", "copyfrom <id> <path>"
+	// and "copyto <id> <path>".
+	Calls []string
 	// LogsData is what ContainerLogs returns for an existing container.
 	LogsData []byte
 
@@ -46,6 +62,8 @@ type FakeRuntime struct {
 	CreateErr  error
 	StartErr   error
 	ListErr    error
+	// ArchiveErr fails CopyFromContainer and CopyToContainer.
+	ArchiveErr error
 
 	// StartHook, when set, runs at the start of StartContainer without the
 	// runtime's lock held. A test can block in it to hold a start open, and a
@@ -65,7 +83,12 @@ var _ backends.Runtime = (*FakeRuntime)(nil)
 
 // NewFakeRuntime returns an empty FakeRuntime with no images.
 func NewFakeRuntime() *FakeRuntime {
-	return &FakeRuntime{Images: map[string]bool{}, containers: map[string]*fakeContainer{}}
+	return &FakeRuntime{
+		Images:     map[string]bool{},
+		Volumes:    map[string][]byte{},
+		Imported:   map[string][]byte{},
+		containers: map[string]*fakeContainer{},
+	}
 }
 
 // Lock locks the runtime so a test can read or change the exported fields
@@ -158,6 +181,7 @@ func (f *FakeRuntime) EnsureNetwork(_ context.Context, name string) error {
 func (f *FakeRuntime) CreateContainer(_ context.Context, spec backends.ContainerSpec) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.Calls = append(f.Calls, "create "+spec.Name)
 	if f.CreateErr != nil {
 		return "", f.CreateErr
 	}
@@ -191,6 +215,7 @@ func (f *FakeRuntime) StartContainer(ctx context.Context, id string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.Started = append(f.Started, id)
+	f.Calls = append(f.Calls, "start "+id)
 	if f.StartErr != nil {
 		return f.StartErr
 	}
@@ -218,6 +243,7 @@ func (f *FakeRuntime) StopContainer(_ context.Context, id string, _ time.Duratio
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.Stopped = append(f.Stopped, id)
+	f.Calls = append(f.Calls, "stop "+id)
 	if c := f.find(id); c != nil {
 		c.info.State = "exited"
 	}
@@ -230,6 +256,7 @@ func (f *FakeRuntime) RemoveContainer(_ context.Context, id string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.Removed = append(f.Removed, id)
+	f.Calls = append(f.Calls, "rmctr "+id)
 	if c := f.find(id); c != nil {
 		delete(f.containers, c.info.ID)
 	}
@@ -262,11 +289,64 @@ func (f *FakeRuntime) ContainerLogs(_ context.Context, id string, _ int) ([]byte
 	return append([]byte(nil), f.LogsData...), nil
 }
 
-// RemoveVolume records name.
+// RemoveVolume records name and forgets the volume's contents.
 func (f *FakeRuntime) RemoveVolume(_ context.Context, name string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.VolumesRemoved = append(f.VolumesRemoved, name)
+	f.Calls = append(f.Calls, "rmvol "+name)
+	delete(f.Volumes, name)
+	return nil
+}
+
+// CopyFromContainer returns the tar stream of the volume the container mounts.
+func (f *FakeRuntime) CopyFromContainer(_ context.Context, id, path string) (io.ReadCloser, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.Calls = append(f.Calls, "copyfrom "+id+" "+path)
+	if f.ArchiveErr != nil {
+		return nil, f.ArchiveErr
+	}
+	c := f.find(id)
+	if c == nil {
+		return nil, notFound("container", id)
+	}
+	if data, ok := f.Volumes[c.spec.Volume]; ok {
+		return io.NopCloser(bytes.NewReader(data)), nil
+	}
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+	_ = tw.WriteHeader(&tar.Header{Typeflag: tar.TypeDir, Name: "data/", Mode: 0o755, Uid: f.DataUID, Gid: f.DataGID})
+	_ = tw.Close()
+	return io.NopCloser(&buf), nil
+}
+
+// CopyToContainer stores the archive bytes in Imported for the container's volume.
+func (f *FakeRuntime) CopyToContainer(_ context.Context, id, path string, archive io.Reader) error {
+	f.mu.Lock()
+	f.Calls = append(f.Calls, "copyto "+id+" "+path)
+	err, c := f.ArchiveErr, f.find(id)
+	var volume string
+	if c != nil {
+		volume = c.spec.Volume
+	}
+	f.mu.Unlock()
+	if err != nil {
+		return err
+	}
+	if c == nil {
+		return notFound("container", id)
+	}
+	data, err := io.ReadAll(archive)
+	if err != nil {
+		return err
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.Imported == nil {
+		f.Imported = map[string][]byte{}
+	}
+	f.Imported[volume] = data
 	return nil
 }
 

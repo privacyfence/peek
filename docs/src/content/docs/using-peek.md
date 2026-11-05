@@ -86,7 +86,9 @@ const result = await res.json();
 
 The path starts with `/` and goes to the container; `GET`, `POST`, `PUT`, `PATCH` and `DELETE` are allowed, only the `content-type` and `accept` headers are sent, requests are limited to 1 MiB and responses to 8 MiB, and calls fail after 35 s. Viewers need the same access as to the page, and nothing changes for them. The page cannot use `peek.fetch` after a viewer has clicked a link that navigated the iframe away from it.
 
-The container listens on `$PORT` (default 8080) and has a writable `/data` volume; the rest of its filesystem is read-only. Peek sets `PORT`, `PEEK_BACKEND_TOKEN`, `PEEK_UPLOAD_ID` and `PEEK_VERSION`, and adds `X-Peek-Backend-Token` (the backend must reject requests without it), `X-Peek-Upload-Id`, `X-Peek-Version`, `X-Peek-Viewer` (a stable per-page id for the viewer's browser) and, on signed-in and restricted pages only, `X-Peek-User-Id` and `X-Peek-User-Email` to every request. Deleting a page deletes its data volume. See `examples/random-number` in the repository for the smallest backend, explained line by line, and `examples/contact-form` for a complete one.
+The container listens on `$PORT` (default 8080) and has a writable `/data` volume; the rest of its filesystem is read-only. Peek sets `PORT`, `PEEK_BACKEND_TOKEN`, `PEEK_UPLOAD_ID` and `PEEK_VERSION`, and adds `X-Peek-Backend-Token` (the backend must reject requests without it), `X-Peek-Upload-Id`, `X-Peek-Version`, `X-Peek-Viewer` (a stable per-page id for the viewer's browser), `X-Peek-Caller` (`browser` or `token`) and, on signed-in and restricted pages only, `X-Peek-User-Id` and `X-Peek-User-Email` to every request. Deleting a page deletes its data volume. See `examples/random-number` in the repository for the smallest backend, explained line by line, and `examples/contact-form` for a complete one.
+
+Scripts and scheduled agents can call the backend with an API token. Turn it on with `peek backend token-calls on <slug>`, then run `peek backend call <slug> /api/items` or `curl -H "Authorization: Bearer $PEEK_TOKEN" https://peek.example.com/api/uploads/<slug>/versions/latest/svc/api/items`. The call follows the page's access rule, wakes the backend if it is stopped, and reaches it with `X-Peek-Caller: token`. `peek backend data export <slug>` and `peek backend data import <slug> <file>` download and replace the backend's `/data` volume, which server backups do not include. Peek adds `X-Peek-Backend-Token` to every call it relays, so it proves only that the call came through Peek. On a public page anyone can make that call, so the backend must do its own authorization for anything it should not serve to everyone.
 
 ## Keep Filters In The Address Bar
 
@@ -189,6 +191,9 @@ peek upload <file.html> --slug <slug>
 peek upload <file.html> --backend <image> [--backend-port <n>]
 peek backend <slug>
 peek backend set|remove|restart|logs <slug> ...
+peek backend call <slug> <path>
+peek backend token-calls on|off <slug>
+peek backend data export|import <slug> ...
 peek backend env set|unset <slug> <NAME> ...
 peek versions <slug>
 peek grant|revoke <slug> <email> [--group]

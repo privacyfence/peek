@@ -4,6 +4,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -67,7 +69,7 @@ func TestBackendShowTable(t *testing.T) {
 func TestBackendShowEmptyAndDisabled(t *testing.T) {
 	backendServer(t, 200, "application/json", `{"enabled":true,"versions":[],"env":[]}`)
 	out, _, err := runBackend(t, "p")
-	if err != nil || strings.TrimSpace(out) != "no backend" {
+	if err != nil || strings.TrimSpace(out) != "no backend\ntoken calls: off" {
 		t.Fatalf("out=%q err=%v", out, err)
 	}
 	backendServer(t, 200, "application/json", `{"enabled":false,"versions":[],"env":[]}`)
@@ -229,5 +231,186 @@ func TestBackendEnvFailures(t *testing.T) {
 	}
 	for name, fn := range cases {
 		t.Run(name, func(t *testing.T) { covEnvFailures(t, fn) })
+	}
+}
+
+type callReq struct {
+	Method string
+	URI    string
+	Body   string
+	Header http.Header
+}
+
+// backendCallServer records every request and answers with status, respHeader and body.
+func backendCallServer(t *testing.T, status int, respHeader map[string]string, body string) chan callReq {
+	t.Helper()
+	seen := make(chan callReq, 64)
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
+			t.Errorf("authorization = %q", got)
+		}
+		b, _ := io.ReadAll(r.Body)
+		seen <- callReq{r.Method, r.URL.RequestURI(), string(b), r.Header.Clone()}
+		for k, v := range respHeader {
+			w.Header().Set(k, v)
+		}
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte(body))
+	}))
+	t.Cleanup(ts.Close)
+	configureTestClient(t, ts.URL)
+	return seen
+}
+
+func TestBackendCallRequest(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "in.json")
+	if err := os.WriteFile(file, []byte(`{"f":1}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	const base = "/api/uploads/my-page/versions/latest/svc/"
+	cases := []struct {
+		name        string
+		args        []string
+		stdin       string
+		method, uri string
+		body, ctype string
+		accept      string
+	}{
+		{name: "default", args: []string{"my-page", "api/items"}, method: "GET", uri: base + "api/items"},
+		{name: "leading slash", args: []string{"my-page", "/api/items"}, method: "GET", uri: base + "api/items"},
+		{name: "query", args: []string{"my-page", "api/items?a=1&b=2"}, method: "GET", uri: base + "api/items?a=1&b=2"},
+		{name: "escape", args: []string{"my-page", "a b/c"}, method: "GET", uri: base + "a%20b/c"},
+		{name: "version", args: []string{"my-page", "x", "--version", "3"}, method: "GET", uri: "/api/uploads/my-page/versions/3/svc/x"},
+		{name: "data", args: []string{"my-page", "x", "--data", `{"a":1}`}, method: "POST", uri: base + "x", body: `{"a":1}`, ctype: "application/json"},
+		{name: "file", args: []string{"my-page", "x", "--data", "@" + file}, method: "POST", uri: base + "x", body: `{"f":1}`, ctype: "application/json"},
+		{name: "stdin", args: []string{"my-page", "x", "--data", "-"}, stdin: `{"s":1}`, method: "POST", uri: base + "x", body: `{"s":1}`, ctype: "application/json"},
+		{name: "method", args: []string{"my-page", "x", "--method", "put"}, method: "PUT", uri: base + "x"},
+		{name: "header", args: []string{"my-page", "x", "-H", "Accept: text/plain"}, method: "GET", uri: base + "x", accept: "text/plain"},
+		{name: "content type", args: []string{"my-page", "x", "--data", "a=b", "-H", "content-type: text/plain"}, method: "POST", uri: base + "x", body: "a=b", ctype: "text/plain"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			seen := backendCallServer(t, 200, nil, "ok")
+			if tc.stdin != "" {
+				withStdin(t, tc.stdin)
+			}
+			out, _, err := runBackend(t, append([]string{"call"}, tc.args...)...)
+			if err != nil || out != "ok" {
+				t.Fatalf("out=%q err=%v", out, err)
+			}
+			r := <-seen
+			if r.Method != tc.method || r.URI != tc.uri || r.Body != tc.body {
+				t.Fatalf("req = %+v", r)
+			}
+			if got := r.Header.Get("Content-Type"); got != tc.ctype {
+				t.Fatalf("content-type = %q, want %q", got, tc.ctype)
+			}
+			if got := r.Header.Get("Accept"); tc.accept != "" && got != tc.accept {
+				t.Fatalf("accept = %q", got)
+			}
+		})
+	}
+}
+
+func TestBackendCallRejectsBadInput(t *testing.T) {
+	big := strings.Repeat("x", 1<<20+1)
+	cases := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"dot", []string{"p", "a/./b"}, "path must not contain . or .. segments"},
+		{"dotdot", []string{"p", "../b"}, "path must not contain . or .. segments"},
+		{"method", []string{"p", "x", "--method", "TRACE"}, "--method must be GET, POST, PUT, PATCH or DELETE"},
+		{"header name", []string{"p", "x", "-H", "X-Foo: 1"}, "only Content-Type and Accept headers are passed to the backend"},
+		{"header colon", []string{"p", "x", "-H", "nocolon"}, `-H must be "Name: value"`},
+		{"big", []string{"p", "x", "--data", big}, "--data is larger than 1 MiB"},
+		{"missing", []string{"p"}, `usage: peek backend call <slug> <path> [--method M] [--data <json|@file|->] [--version <n>|latest] [-H "Name: value"]`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			seen := backendCallServer(t, 200, nil, "")
+			out, _, err := runBackend(t, append([]string{"call"}, tc.args...)...)
+			if err == nil || err.Error() != tc.want || out != "" {
+				t.Fatalf("out=%q err=%v", out, err)
+			}
+			if len(seen) != 0 {
+				t.Fatal("request was sent")
+			}
+		})
+	}
+}
+
+func TestBackendCallOutput(t *testing.T) {
+	backendCallServer(t, 200, nil, `{"ok":true}`)
+	out, _, err := runBackend(t, "call", "p", "x")
+	if err != nil || out != `{"ok":true}` {
+		t.Fatalf("out=%q err=%v", out, err)
+	}
+	backendCallServer(t, 500, map[string]string{"X-Peek-Relay": "backend"}, "boom")
+	out, _, err = runBackend(t, "call", "p", "x")
+	if err == nil || err.Error() != "backend returned 500 Internal Server Error" || out != "boom" {
+		t.Fatalf("out=%q err=%v", out, err)
+	}
+	backendCallServer(t, 403, nil, `{"error":"token calls are not enabled for this backend"}`)
+	out, _, err = runBackend(t, "call", "p", "x")
+	if err == nil || err.Error() != "token calls are not enabled for this backend" || out != "" {
+		t.Fatalf("out=%q err=%v", out, err)
+	}
+}
+
+func TestBackendTokenCallsCommand(t *testing.T) {
+	seen := backendCallServer(t, 200, nil, `{"status":"ok"}`)
+	for _, tc := range []struct{ arg, body, out string }{
+		{"on", `{"enabled":true}`, "token calls enabled for my-page"},
+		{"off", `{"enabled":false}`, "token calls disabled for my-page"},
+	} {
+		out, _, err := runBackend(t, "token-calls", tc.arg, "my-page")
+		if err != nil || strings.TrimSpace(out) != tc.out {
+			t.Fatalf("out=%q err=%v", out, err)
+		}
+		r := <-seen
+		if r.Method != "PUT" || r.URI != "/api/uploads/my-page/backend/token-calls" || r.Body != tc.body {
+			t.Fatalf("req = %+v", r)
+		}
+	}
+	for _, args := range [][]string{{"token-calls"}, {"token-calls", "maybe", "p"}, {"token-calls", "on"}, {"token-calls", "--bad"}} {
+		_, _, err := runBackend(t, args...)
+		if err == nil {
+			t.Fatalf("%v: expected error", args)
+		}
+		if args[len(args)-1] != "--bad" && err.Error() != "usage: peek backend token-calls on|off <slug>" {
+			t.Fatalf("%v: err = %v", args, err)
+		}
+	}
+}
+
+func TestBackendSetAllowTokenCalls(t *testing.T) {
+	seen := backendCallServer(t, 200, nil, `{}`)
+	out, _, err := runBackend(t, "set", "p", "img:1", "--allow-token-calls")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "backend set on p (version latest): img:1") || !strings.Contains(out, "token calls enabled for p") {
+		t.Fatalf("out = %q", out)
+	}
+	if r := <-seen; r.URI != "/api/uploads/p/versions/latest/backend" {
+		t.Fatalf("first = %+v", r)
+	}
+	if r := <-seen; r.Method != "PUT" || r.URI != "/api/uploads/p/backend/token-calls" || r.Body != `{"enabled":true}` {
+		t.Fatalf("second = %+v", r)
+	}
+}
+
+func TestBackendShowTokenCalls(t *testing.T) {
+	backendServer(t, 200, "application/json", `{"enabled":true,"token_calls":true,"versions":[],"env":[]}`)
+	out, _, err := runBackend(t, "p")
+	if err != nil || !strings.Contains(out, "token calls: on") {
+		t.Fatalf("out=%q err=%v", out, err)
+	}
+	backendServer(t, 200, "application/json", `{"enabled":true,"token_calls":false,"versions":[],"env":[]}`)
+	out, _, err = runBackend(t, "p")
+	if err != nil || !strings.Contains(out, "token calls: off") {
+		t.Fatalf("out=%q err=%v", out, err)
 	}
 }

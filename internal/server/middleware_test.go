@@ -2,6 +2,7 @@ package server
 
 import (
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
@@ -77,5 +78,29 @@ func TestBodyLimitExemptsBackendRelay(t *testing.T) {
 	}
 	if got := len(tb.seen().Body); got != 1<<20 {
 		t.Fatalf("backend received %d bytes, want %d", got, 1<<20)
+	}
+}
+
+func TestBodyLimitExempt(t *testing.T) {
+	for _, tc := range []struct {
+		method, target string
+		want           bool
+	}{
+		{http.MethodGet, "/svc/x/v/1/a", true},
+		{http.MethodPost, "/api/upload", true},
+		{http.MethodGet, "/api/uploads/x/versions/1/svc/a", true},
+		{http.MethodPost, "/api/uploads/x/versions/latest/svc/", true},
+		{http.MethodPut, "/api/uploads/x/backend/data", true},
+		{http.MethodGet, "/api/uploads/x/backend/data", false},
+		{http.MethodPut, "/api/uploads/x/backend/env/A", false},
+		{http.MethodPut, "/api/uploads/x/versions/1/backend", false},
+		{http.MethodPost, "/api/uploads/x/versions", false},
+		{http.MethodPost, "/api/uploads/x/stats", false},
+		{http.MethodPost, "/api/uploads/a%2Fversions%2F1%2Fsvc%2Fz/grants", false},
+	} {
+		r := httptest.NewRequest(tc.method, tc.target, nil)
+		if got := bodyLimitExempt(r); got != tc.want {
+			t.Errorf("%s %s exempt = %v, want %v", tc.method, tc.target, got, tc.want)
+		}
 	}
 }

@@ -66,3 +66,37 @@ func TestCovCommentsKindAndContextVariants(t *testing.T) {
 		t.Fatalf("empty: %q %v", out, err)
 	}
 }
+
+func statsOutput(t *testing.T, body string) string {
+	t.Helper()
+	ts := covFake(t, map[string]string{"/api/uploads/demo/stats": body}, nil)
+	configureTestClient(t, ts.URL)
+	out, err := captureStdout(t, func() error { return cmdStats([]string{"demo"}) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+func TestStatsTokenCalls(t *testing.T) {
+	out := statsOutput(t, `{"slug":"demo","name":"Demo","total_visits":0,"unique_visitors":0,"recent":[],"token_calls":[{"caller":"abcdef0123456789","email":"bot@example.com","version":3,"calls":42,"last_call_at":0,"last_status":200},{"caller":"3f9a12bcdeadbeef","version":3,"calls":7,"last_call_at":0,"last_status":500},{"caller":"abc","version":1,"calls":1,"last_call_at":0,"last_status":200}]}`)
+	for _, want := range []string{"token calls:", "CALLER", "LAST CALL", "bot@example.com", "caller 3f9a12bc…", "caller abc…"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("output missing %q: %q", want, out)
+		}
+	}
+	if strings.Contains(out, "abcdef01") {
+		t.Fatalf("hash leaked next to email: %q", out)
+	}
+}
+
+func TestStatsWithoutTokenCalls(t *testing.T) {
+	for _, body := range []string{
+		`{"slug":"demo","name":"Demo","total_visits":0,"unique_visitors":0,"recent":[]}`,
+		`{"slug":"demo","name":"Demo","total_visits":0,"unique_visitors":0,"recent":[],"token_calls":[]}`,
+	} {
+		if out := statsOutput(t, body); strings.Contains(out, "token calls") {
+			t.Fatalf("unexpected section: %q", out)
+		}
+	}
+}

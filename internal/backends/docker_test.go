@@ -543,3 +543,56 @@ func TestPickAPIVersion(t *testing.T) {
 		t.Error("a version is newer than an invalid one")
 	}
 }
+
+func TestDockerCopyFromContainer(t *testing.T) {
+	rt, reqs := fakeDocker(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, "tar-bytes")
+	})
+	rc, err := rt.CopyFromContainer(context.Background(), "c 1", "/data")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, _ := io.ReadAll(rc)
+	_ = rc.Close()
+	if string(got) != "tar-bytes" {
+		t.Fatalf("body = %q", got)
+	}
+	r := (*reqs)[0]
+	if r.Method != "GET" || r.Path != "/v1.43/containers/c%201/archive" || r.Query.Get("path") != "/data" {
+		t.Fatalf("request %+v", r)
+	}
+
+	rt, _ = fakeDocker(t, status(404, `{"message":"no such container"}`))
+	_, err = rt.CopyFromContainer(context.Background(), "x", "/data")
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) || apiErr.Status != 404 {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestDockerCopyToContainer(t *testing.T) {
+	rt, reqs := fakeDocker(t, status(200, ""))
+	if err := rt.CopyToContainer(context.Background(), "c1", "/data", strings.NewReader("tar-bytes")); err != nil {
+		t.Fatal(err)
+	}
+	r := (*reqs)[0]
+	if r.Method != "PUT" || r.Path != "/v1.43/containers/c1/archive" {
+		t.Fatalf("request %+v", r)
+	}
+	if r.Query.Encode() != "path=%2Fdata" {
+		t.Errorf("query = %q", r.Query.Encode())
+	}
+	if r.Header.Get("Content-Type") != "application/x-tar" {
+		t.Errorf("Content-Type = %q", r.Header.Get("Content-Type"))
+	}
+	if r.Body != "tar-bytes" {
+		t.Errorf("body = %q", r.Body)
+	}
+
+	rt, _ = fakeDocker(t, status(403, `{"message":"read-only"}`))
+	err := rt.CopyToContainer(context.Background(), "c1", "/data", strings.NewReader("x"))
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) || apiErr.Status != 403 {
+		t.Fatalf("err = %v", err)
+	}
+}

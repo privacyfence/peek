@@ -2,7 +2,7 @@
 
 A one-page contact form with a container backend. The page (`index.html`) calls `peek.fetch("/api/contact", ...)`; Peek relays the call to this container (`main.go`), which sends an email through your SMTP server and keeps a copy of every submission in `/data/submissions.jsonl`.
 
-The backend only answers requests that carry the `X-Peek-Backend-Token` header Peek adds, so it cannot be called around Peek. `GET /api/submissions` returns the stored submissions, and only when Peek sets `X-Peek-User-Email`, which happens on signed-in and restricted pages.
+The backend only answers requests that carry the `X-Peek-Backend-Token` header Peek adds, so it cannot be called around Peek. `GET /api/submissions` returns the stored submissions, and only when Peek sets `X-Peek-User-Email`, which happens on signed-in and restricted pages. Peek also sends `X-Peek-Caller` (`browser` or `token`). A script can read the submissions with `peek backend call <slug> /api/submissions` on a signed-in or restricted page once token calls are on.
 
 ## Build and push
 

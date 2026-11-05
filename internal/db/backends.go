@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"time"
 
 	"github.com/privacyfence/peek/internal/models"
@@ -111,6 +112,67 @@ func scanUploadBackends(rows *sql.Rows) ([]models.UploadBackend, error) {
 		b.CreatedByAccountID = creator.Int64
 		b.CreatedAt = time.Unix(created, 0)
 		out = append(out, b)
+	}
+	return out, rows.Err()
+}
+
+// UploadBackendTokenCalls reports whether the page's owner allowed API-token calls to its backend. No row means false.
+func (s *Store) UploadBackendTokenCalls(ctx context.Context, uploadID int64) (bool, error) {
+	var v int
+	err := s.QueryRowContext(ctx, `SELECT allow_token_calls FROM upload_backend_settings WHERE upload_id=?`, uploadID).Scan(&v)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return v != 0, nil
+}
+
+// SetUploadBackendTokenCalls upserts the page's token-call flag.
+func (s *Store) SetUploadBackendTokenCalls(ctx context.Context, uploadID int64, enabled bool) error {
+	v := 0
+	if enabled {
+		v = 1
+	}
+	_, err := s.ExecContext(ctx, `INSERT INTO upload_backend_settings(upload_id,allow_token_calls,updated_at) VALUES(?,?,?)
+		ON CONFLICT(upload_id) DO UPDATE SET allow_token_calls=excluded.allow_token_calls, updated_at=excluded.updated_at`,
+		uploadID, v, time.Now().Unix())
+	return err
+}
+
+// RecordBackendTokenCall adds one call by accountID to a page version's counter and stores its time and status.
+// identified says whether this call sent the account's identity to the backend; once set it stays set.
+func (s *Store) RecordBackendTokenCall(ctx context.Context, uploadID int64, version int, accountID int64, status int, identified bool) error {
+	id := 0
+	if identified {
+		id = 1
+	}
+	_, err := s.ExecContext(ctx, `INSERT INTO backend_token_calls(upload_id,version,account_id,calls,last_call_at,last_status,identified) VALUES(?,?,?,1,?,?,?)
+		ON CONFLICT(upload_id,version,account_id) DO UPDATE SET calls=calls+1, last_call_at=excluded.last_call_at, last_status=excluded.last_status, identified=MAX(identified, excluded.identified)`,
+		uploadID, version, accountID, time.Now().Unix(), status, id)
+	return err
+}
+
+// ListBackendTokenCalls returns a page's token-call counters, newest last call first, at most limit rows.
+func (s *Store) ListBackendTokenCalls(ctx context.Context, uploadID int64, limit int) ([]models.BackendTokenCall, error) {
+	rows, err := s.QueryContext(ctx, `SELECT c.upload_id,c.version,c.account_id,COALESCE(a.email,''),c.calls,c.last_call_at,c.last_status,c.identified
+		FROM backend_token_calls c LEFT JOIN accounts a ON a.id=c.account_id
+		WHERE c.upload_id=? ORDER BY c.last_call_at DESC, c.version DESC, c.account_id LIMIT ?`, uploadID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []models.BackendTokenCall
+	for rows.Next() {
+		var c models.BackendTokenCall
+		var ts, ident int64
+		if err := rows.Scan(&c.UploadID, &c.Version, &c.AccountID, &c.Email, &c.Calls, &ts, &c.LastStatus, &ident); err != nil {
+			return nil, err
+		}
+		c.LastCallAt = time.Unix(ts, 0)
+		c.Identified = ident != 0
+		out = append(out, c)
 	}
 	return out, rows.Err()
 }

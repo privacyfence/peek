@@ -141,6 +141,18 @@ type BackendEnvVar struct {
 	UpdatedAt time.Time
 }
 
+// BackendTokenCall counts one account's API-token calls to one page version's backend.
+type BackendTokenCall struct {
+	UploadID   int64
+	Version    int
+	AccountID  int64
+	Email      string // the account's email; "" for automation accounts
+	Calls      int64
+	LastCallAt time.Time
+	LastStatus int  // HTTP status the backend answered the last call with
+	Identified bool // some call was made while the page was signed-in or restricted, so the backend got the account's identity
+}
+
 type Comment struct {
 	ID              int64
 	UploadID        int64

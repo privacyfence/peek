@@ -6,6 +6,9 @@ All notable user-visible changes to Peek are recorded here. The format follows [
 
 ### Added
 
+- API tokens can call a page's backend through `/api/uploads/<slug>/versions/<n|latest>/svc/<path>`, under the same access rule as the page, once the owner turns it on with `peek backend token-calls on <slug>` (or `peek backend set --allow-token-calls`). Backends get `X-Peek-Caller` (`browser` or `token`), and `peek stats` shows token calls per caller and version.
+- `peek backend call <slug> <path>` calls a page's backend with your login.
+- `peek backend data export` and `import` download and replace a page's `/data` volume, which `peekd backup` does not include. Imports are capped by the new `max_backend_data_import` setting (default 256 MiB).
 - `examples/random-number`: a minimal page backend (one button, a Python server that returns `openssl rand -hex 16`) with a line-by-line walkthrough of the Dockerfile and the backend token.
 
 ## [0.18.1] - 2026-11-04

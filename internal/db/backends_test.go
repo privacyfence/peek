@@ -169,3 +169,156 @@ func TestDeleteUploadRemovesBackendRows(t *testing.T) {
 		t.Fatalf("env remains: %+v", list)
 	}
 }
+
+func TestUploadBackendTokenCallsDefaultsOff(t *testing.T) {
+	s := openTestStore(t)
+	defer s.Close()
+	_, id := seedVersionUpload(t, s, "o@example.test", "tc-a", 1)
+	on, err := s.UploadBackendTokenCalls(context.Background(), id)
+	if err != nil || on {
+		t.Fatalf("on=%v err=%v, want false, nil", on, err)
+	}
+}
+
+func TestSetUploadBackendTokenCallsUpsert(t *testing.T) {
+	s := openTestStore(t)
+	defer s.Close()
+	ctx := context.Background()
+	_, id := seedVersionUpload(t, s, "o@example.test", "tc-b", 1)
+	for _, want := range []bool{true, false, true} {
+		if err := s.SetUploadBackendTokenCalls(ctx, id, want); err != nil {
+			t.Fatal(err)
+		}
+		got, err := s.UploadBackendTokenCalls(ctx, id)
+		if err != nil || got != want {
+			t.Fatalf("got %v err %v, want %v", got, err, want)
+		}
+	}
+}
+
+func TestRecordBackendTokenCallCounts(t *testing.T) {
+	s := openTestStore(t)
+	defer s.Close()
+	ctx := context.Background()
+	a, id := seedVersionUpload(t, s, "o@example.test", "tc-c", 1)
+	b, err := s.CreateAccount(ctx, "", "robot", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	must := func(err error) {
+		t.Helper()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	must(s.RecordBackendTokenCall(ctx, id, 1, a, 200, false))
+	must(s.RecordBackendTokenCall(ctx, id, 1, a, 500, true))
+	must(s.RecordBackendTokenCall(ctx, id, 1, a, 500, false))
+	must(s.RecordBackendTokenCall(ctx, id, 2, b.ID, 200, false))
+	_, err = s.Exec(`UPDATE backend_token_calls SET last_call_at=1000 WHERE account_id=?`, a)
+	must(err)
+	_, err = s.Exec(`UPDATE backend_token_calls SET last_call_at=2000 WHERE account_id=?`, b.ID)
+	must(err)
+	list, err := s.ListBackendTokenCalls(ctx, id, 100)
+	must(err)
+	if len(list) != 2 {
+		t.Fatalf("rows = %+v", list)
+	}
+	if list[0].AccountID != b.ID || list[0].Version != 2 || list[0].Email != "" || list[0].Calls != 1 || list[0].Identified {
+		t.Fatalf("first row = %+v", list[0])
+	}
+	r := list[1]
+	if r.AccountID != a || r.Calls != 3 || r.LastStatus != 500 || !r.Identified || r.Email != "o@example.test" || r.LastCallAt.Unix() != 1000 {
+		t.Fatalf("second row = %+v", r)
+	}
+}
+
+func TestListBackendTokenCallsLimit(t *testing.T) {
+	s := openTestStore(t)
+	defer s.Close()
+	ctx := context.Background()
+	a, id := seedVersionUpload(t, s, "o@example.test", "tc-d", 1)
+	for v := 1; v <= 2; v++ {
+		if err := s.RecordBackendTokenCall(ctx, id, v, a, 200, false); err != nil {
+			t.Fatal(err)
+		}
+	}
+	list, err := s.ListBackendTokenCalls(ctx, id, 1)
+	if err != nil || len(list) != 1 {
+		t.Fatalf("list = %+v err %v", list, err)
+	}
+}
+
+func TestBackendTokenCallsCascadeOnUploadDelete(t *testing.T) {
+	s := openTestStore(t)
+	defer s.Close()
+	ctx := context.Background()
+	a, id := seedVersionUpload(t, s, "o@example.test", "tc-e", 1)
+	if err := s.SetUploadBackendTokenCalls(ctx, id, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RecordBackendTokenCall(ctx, id, 1, a, 200, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DeleteUpload(ctx, id); err != nil {
+		t.Fatal(err)
+	}
+	for _, table := range []string{"upload_backend_settings", "backend_token_calls"} {
+		var n int
+		if err := s.QueryRow(`SELECT COUNT(*) FROM `+table+` WHERE upload_id=?`, id).Scan(&n); err != nil || n != 0 {
+			t.Fatalf("%s rows = %d err %v", table, n, err)
+		}
+	}
+}
+
+func TestBackendTokenCallStoreErrors(t *testing.T) {
+	ctx := context.Background()
+	t.Run("get", func(t *testing.T) {
+		s := openTestStore(t)
+		defer s.Close()
+		_, id := seedVersionUpload(t, s, "o@example.test", "tc-f", 1)
+		if _, err := s.Exec(`DROP TABLE upload_backend_settings`); err != nil {
+			t.Fatal(err)
+		}
+		_, err := s.UploadBackendTokenCalls(ctx, id)
+		if err == nil {
+			t.Fatal("want error")
+		}
+	})
+	t.Run("set", func(t *testing.T) {
+		s := openTestStore(t)
+		defer s.Close()
+		_, id := seedVersionUpload(t, s, "o@example.test", "tc-g", 1)
+		failOn(t, s, "upload_backend_settings", "INSERT")
+		wantErr(t, "set", s.SetUploadBackendTokenCalls(ctx, id, true), errInjected)
+	})
+	t.Run("record", func(t *testing.T) {
+		s := openTestStore(t)
+		defer s.Close()
+		a, id := seedVersionUpload(t, s, "o@example.test", "tc-h", 1)
+		failOn(t, s, "backend_token_calls", "INSERT")
+		wantErr(t, "record", s.RecordBackendTokenCall(ctx, id, 1, a, 200, false), errInjected)
+	})
+	t.Run("list query", func(t *testing.T) {
+		s := openTestStore(t)
+		defer s.Close()
+		_, id := seedVersionUpload(t, s, "o@example.test", "tc-i", 1)
+		if _, err := s.Exec(`DROP TABLE backend_token_calls`); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.ListBackendTokenCalls(ctx, id, 10); err == nil {
+			t.Fatal("want error")
+		}
+	})
+	t.Run("list scan", func(t *testing.T) {
+		s := openTestStore(t)
+		defer s.Close()
+		a, id := seedVersionUpload(t, s, "o@example.test", "tc-j", 1)
+		if err := s.RecordBackendTokenCall(ctx, id, 1, a, 200, false); err != nil {
+			t.Fatal(err)
+		}
+		corruptInt(t, s, "backend_token_calls", "calls")
+		_, err := s.ListBackendTokenCalls(ctx, id, 10)
+		wantErr(t, "list", err, errScan)
+	})
+}

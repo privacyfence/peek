@@ -1,9 +1,12 @@
 package backendstest
 
 import (
+	"archive/tar"
 	"context"
 	"errors"
+	"io"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -227,5 +230,80 @@ func TestFakeRuntimeAddContainer(t *testing.T) {
 	list, _ := f.ListContainers(ctx, map[string]string{"peek.instance": "a"})
 	if len(list) != 1 || list[0].ID != "c1" {
 		t.Fatalf("ListContainers = %v", list)
+	}
+}
+
+func TestFakeArchive(t *testing.T) {
+	ctx := context.Background()
+	f := NewFakeRuntime()
+	f.DataUID, f.DataGID = 1000, 1001
+
+	if _, err := f.CopyFromContainer(ctx, "nope", "/data"); !backends.IsNotFound(err) {
+		t.Fatalf("CopyFromContainer unknown = %v", err)
+	}
+	if err := f.CopyToContainer(ctx, "nope", "/data", strings.NewReader("")); !backends.IsNotFound(err) {
+		t.Fatalf("CopyToContainer unknown = %v", err)
+	}
+
+	id, err := f.CreateContainer(ctx, backends.ContainerSpec{Name: "helper", Volume: "vol"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rc, err := f.CopyFromContainer(ctx, id, "/data")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tr := tar.NewReader(rc)
+	h, err := tr.Next()
+	if err != nil || h.Name != "data/" || h.Typeflag != tar.TypeDir || h.Uid != 1000 || h.Gid != 1001 {
+		t.Fatalf("default entry = %+v, %v", h, err)
+	}
+	if _, err := tr.Next(); err != io.EOF {
+		t.Fatalf("second entry err = %v", err)
+	}
+	_ = rc.Close()
+
+	f.Volumes["vol"] = []byte("custom")
+	rc, _ = f.CopyFromContainer(ctx, id, "/data")
+	if got, _ := io.ReadAll(rc); string(got) != "custom" {
+		t.Fatalf("volume stream = %q", got)
+	}
+
+	if err := f.CopyToContainer(ctx, id, "/data", strings.NewReader("payload")); err != nil {
+		t.Fatal(err)
+	}
+	if string(f.Imported["vol"]) != "payload" {
+		t.Fatalf("Imported = %q", f.Imported["vol"])
+	}
+
+	f.ArchiveErr = errors.New("boom")
+	if _, err := f.CopyFromContainer(ctx, id, "/data"); err == nil {
+		t.Error("CopyFromContainer ignored ArchiveErr")
+	}
+	if err := f.CopyToContainer(ctx, id, "/data", strings.NewReader("")); err == nil {
+		t.Error("CopyToContainer ignored ArchiveErr")
+	}
+	f.ArchiveErr = nil
+
+	_ = f.RemoveVolume(ctx, "vol")
+	if _, ok := f.Volumes["vol"]; ok {
+		t.Error("RemoveVolume kept the volume contents")
+	}
+	_ = f.RemoveContainer(ctx, "helper")
+
+	want := []string{
+		"create helper",
+		"copyfrom c1 /data",
+		"copyfrom c1 /data",
+		"copyto c1 /data",
+		"copyfrom c1 /data",
+		"copyto c1 /data",
+		"rmvol vol",
+		"rmctr helper",
+	}
+	// the unknown-container calls come first
+	got := f.Calls
+	if len(got) < len(want)+2 || !slices.Equal(got[2:], want) {
+		t.Fatalf("Calls = %v", got)
 	}
 }
