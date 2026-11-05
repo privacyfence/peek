@@ -7,8 +7,46 @@ outcome_field: merged
 nodes:
   - id: after-steps
     bash: "printf '%s' 'IyBBZnRlciBpbXBsZW1lbnRpbmcgUGFnZSBiYWNrZW5kczogQVBJLXRva2VuIGNhbGxzLCBwZXItcGFnZSBvcHQtaW4sIHRva2VuLWNhbGwgc3RhdHMgYW5kIC9kYXRhIGV4cG9ydC9pbXBvcnQgKCM1MikKCiMjIDEuIFJlYWwtRG9ja2VyIHNtb2tlIHRlc3Qgb2YgdG9rZW4gY2FsbHMgYW5kIC9kYXRhIGV4cG9ydC9pbXBvcnQKCldoeTogQ0kgdGVzdHMgdGhlIHNlcnZlciBvbmx5IGFnYWluc3QgdGhlIGZha2UgY29udGFpbmVyIHJ1bnRpbWUsIGFuZCB0ZXN0cyB0aGUgcmVhbC1Eb2NrZXIgZGF0YSBwYXRoIG9ubHkgaW5zaWRlIHRoZSBiYWNrZW5kcyBwYWNrYWdlLiBUaGlzIHN0ZXAgcnVucyB0aGUgd2hvbGUgY2hhaW4gKENMSSwgc2VydmVyLCBtYW5hZ2VyLCBEb2NrZXIpIGFnYWluc3QgYSByZWFsIGVuZ2luZSwgaW5jbHVkaW5nIHRoZSBjb2xkIHN0YXJ0IGFmdGVyIGFuIGltcG9ydC4gQWxsb3cgYWJvdXQgMjAgbWludXRlcy4gWW91IG5lZWQgYSBtYWNoaW5lIHdpdGggRG9ja2VyIHJ1bm5pbmcgYW5kIHRoZSBmZWF0dXJlIGJyYW5jaCBgZmVhdC9iYWNrZW5kLXRva2VuLWNhbGxzYCBjaGVja2VkIG91dC4KCjEuIEluc3RhbGwgdGhlIHRvb2xjaGFpbiBhbmQgYnVpbGQ6IGBtaXNlIGluc3RhbGwgJiYgbWlzZSBydW4gYnVpbGRgLiBZb3Ugc2hvdWxkIGdldCBgLi9iaW4vcGVla2AgYW5kIGAuL2Jpbi9wZWVrZGAuCjIuIEJ1aWxkIHRoZSBleGFtcGxlIGJhY2tlbmQgaW1hZ2U6IGBkb2NrZXIgYnVpbGQgLXQgbG9jYWxob3N0L3BlZWstZXhhbXBsZS1jb250YWN0OmxvY2FsIGV4YW1wbGVzL2NvbnRhY3QtZm9ybWAuCjMuIFN0YXJ0IHBlZWtkIHdpdGggYmFja2VuZHMgb24sIHVzaW5nIGEgZnJlc2ggZGF0YSBkaXJlY3Rvcnk6IGBybSAtcmYgZGF0YSAmJiBQRUVLX0JBQ0tFTkRTPWRvY2tlciAuL2Jpbi9wZWVrZCAtLWFkZHIgOjc3MDAgLS1kYXRhIC4vZGF0YSAtLWJhc2UtdXJsIGh0dHA6Ly9sb2NhbGhvc3Q6NzcwMGAuIExlYXZlIGl0IHJ1bm5pbmcgaW4gaXRzIG93biB0ZXJtaW5hbC4KNC4gT3BlbiBodHRwOi8vbG9jYWxob3N0Ojc3MDAvc2V0dXAgYW5kIGNyZWF0ZSB0aGUgZmlyc3QgYWRtaW4gYWNjb3VudC4KNS4gT3BlbiBodHRwOi8vbG9jYWxob3N0Ojc3MDAvYWRtaW4sIGdvIHRvIHRoZSAqKkJhY2tlbmRzKiogdGFiLCBzZXQgKipBbGxvd2VkIGJhY2tlbmQgaW1hZ2VzKiogdG8gYGxvY2FsaG9zdC9gIGFuZCBzYXZlLiBSZWZlcmVuY2U6IGh0dHBzOi8vZ2l0aHViLmNvbS9wcml2YWN5ZmVuY2UvcGVlay9ibG9iL2ZlYXQvYmFja2VuZC10b2tlbi1jYWxscy9kb2NzL29wZXJhdGlvbnMubWQjcGFnZS1iYWNrZW5kcwo2LiBJbiBhIHNlY29uZCB0ZXJtaW5hbCwgbG9nIGluIHdpdGggYC4vYmluL3BlZWsgbG9naW4gLS1ob3N0IGh0dHA6Ly9sb2NhbGhvc3Q6NzcwMGAgYW5kIGFwcHJvdmUgdGhlIGxvZ2luIGluIHRoZSBicm93c2VyLgo3LiBVcGxvYWQgdGhlIGV4YW1wbGUgcGFnZSB3aXRoIGl0cyBiYWNrZW5kOiBgLi9iaW4vcGVlayB1cGxvYWQgZXhhbXBsZXMvY29udGFjdC1mb3JtL2luZGV4Lmh0bWwgLS12aXNpYmlsaXR5IHNpZ25lZC1pbiAtLWJhY2tlbmQgbG9jYWxob3N0L3BlZWstZXhhbXBsZS1jb250YWN0OmxvY2FsYC4gTm90ZSB0aGUgc2x1ZyBpdCBwcmludHMuCjguIFJ1biBgLi9iaW4vcGVlayBiYWNrZW5kIGNhbGwgPHNsdWc+IC9hcGkvaGVhbHRoemAuIEV4cGVjdGVkOiBpdCBmYWlscyB3aXRoIGB0b2tlbiBjYWxscyBhcmUgbm90IGVuYWJsZWQgZm9yIHRoaXMgYmFja2VuZGAuCjkuIFJ1biBgLi9iaW4vcGVlayBiYWNrZW5kIHRva2VuLWNhbGxzIG9uIDxzbHVnPmAsIHRoZW4gYC4vYmluL3BlZWsgYmFja2VuZCBjYWxsIDxzbHVnPiAvYXBpL2hlYWx0aHpgLiBFeHBlY3RlZDogYG9rYC4gVGhlbiBgLi9iaW4vcGVlayBiYWNrZW5kIDxzbHVnPmAgc2hvd3MgYHRva2VuIGNhbGxzOiBvbmAsIGFuZCBgLi9iaW4vcGVlayBzdGF0cyA8c2x1Zz5gIGhhcyBhICJ0b2tlbiBjYWxscyIgc2VjdGlvbiB0aGF0IGxpc3RzIHlvdXIgZW1haWwgd2l0aCAxIGNhbGwgYW5kIHN0YXR1cyAyMDAuCjEwLiBSdW4gYC4vYmluL3BlZWsgYmFja2VuZCBkYXRhIGV4cG9ydCA8c2x1Zz4gLW8gYmVmb3JlLnRhcmAuIEV4cGVjdGVkOiBzdGRlcnIgc2hvd3MgYHN0b3BwaW5nIGJhY2tlbmRzIGZvciA8c2x1Zz4gdG8gdGFrZSBhIGNvbnNpc3RlbnQgY29weWAsIHRoZW4gYHdyb3RlIDxuPiBieXRlcyB0byBiZWZvcmUudGFyYC4KMTEuIEJ1aWxkIGEgdGVzdCBhcmNoaXZlOiBgbWtkaXIgZCAmJiBlY2hvIGhpID4gZC9oZWxsby50eHQgJiYgdGFyIC1DIGQgLWNmIGluLnRhciAuYC4gVGhlbiBydW4gYC4vYmluL3BlZWsgYmFja2VuZCBkYXRhIGltcG9ydCA8c2x1Zz4gaW4udGFyIC0teWVzYC4gRXhwZWN0ZWQ6IGBpbXBvcnRlZCA8bj4gYnl0ZXMgaW50byAvZGF0YSBvZiA8c2x1Zz5gLgoxMi4gUnVuIGAuL2Jpbi9wZWVrIGJhY2tlbmQgZGF0YSBleHBvcnQgPHNsdWc+IC1vIGFmdGVyLnRhciAmJiB0YXIgLS1udW1lcmljLW93bmVyIC10dmYgYWZ0ZXIudGFyYC4gRXhwZWN0ZWQ6IGBoZWxsby50eHRgIGlzIGxpc3RlZCB3aXRoIG93bmVyIGA2NTUzMi82NTUzMmAsIGFuZCBub3RoaW5nIGZyb20gYGJlZm9yZS50YXJgIHRoYXQgYGluLnRhcmAgbGFja3MgaXMgbGlzdGVkLgoxMy4gUnVuIGAuL2Jpbi9wZWVrIGJhY2tlbmQgY2FsbCA8c2x1Zz4gL2FwaS9oZWFsdGh6YCBhZ2Fpbi4gRXhwZWN0ZWQ6IGBva2AgKHRoZSBiYWNrZW5kIGNvbGQtc3RhcnRzIGFmdGVyIHRoZSBpbXBvcnQpLgoxNC4gQ2xlYW4gdXA6IHN0b3AgcGVla2Qgd2l0aCBDdHJsLUMsIHRoZW4gZGVsZXRlIGBiZWZvcmUudGFyYCwgYGFmdGVyLnRhcmAsIGBpbi50YXJgIGFuZCBgZC9gLgoKKipSZXBvcnQ6KiogYG1hMSByZWFsLWRvY2tlciBzbW9rZTogUEFTUyAodG9rZW4gY2FsbCByZWZ1c2VkIHdoaWxlIG9mZiwgb2sgd2hlbiBvbiwgc3RhdHMgcm93IHNob3duLCBleHBvcnQvaW1wb3J0IHJvdW5kIHRyaXAgcmVwbGFjZWQgL2RhdGEpYCBvciBgbWExIHJlYWwtZG9ja2VyIHNtb2tlOiBGQUlMIGF0IHN0ZXAgPG4+OiA8d2hhdCBoYXBwZW5lZD5gCg==' | base64 -d > \"$ARTIFACTS_DIR/after.md\"\necho \"after.md written\"\n"
+  - id: worktree-check
+    bash: "set -euo pipefail\nexec 3>&1 1>&2\nB='feat/backend-token-calls'\ngit fetch origin \"$B\" 2>/dev/null || true\nHELD=$(awk -v b=\"refs/heads/$B\" -v me=\"$(git rev-parse --show-toplevel)\" '$1==\"worktree\"{w=$2} $1==\"branch\" && $2==b && w!=me{print w}' <(git worktree list --porcelain))\nQ=\"\"\nif [ -n \"$HELD\" ]; then\n  AHEAD=$(git rev-list --count \"origin/$B..refs/heads/$B\" 2>/dev/null || echo unknown)\n  Q=\"The branch $B is already checked out in another worktree, probably left by an earlier run. Approving removes these worktrees (git worktree remove, never forced; a worktree with uncommitted changes is refused and the run fails). Do not approve if another run is still using one.\\n\\nCommits on the branch not on origin: $AHEAD\"\n  while IFS= read -r w; do Q=\"$Q\\n\\n$w\\nuncommitted paths: $(git -C \"$w\" status --porcelain | wc -l | tr -d ' ')\"; done <<< \"$HELD\"\nfi\nH=\"$HELD\" Q=\"$Q\" python3 -c 'import json,os; print(json.dumps({\"held\": os.environ[\"H\"], \"question\": os.environ[\"Q\"].replace(\"\\\\n\", \"\\n\")}))' >&3\n"
+    output_format:
+      type: object
+      properties:
+        held:
+          type: string
+        question:
+          type: string
+      required:
+        - held
+        - question
+  - id: confirm-worktree-removal
+    depends_on:
+      - worktree-check
+    when: "$worktree-check.output.held != ''"
+    wait:
+      attention: $worktree-check.output.question
+      form: approval
+      labels:
+        workflow: devflow-run
+        stage: worktree-removal
+  - id: stop-at-worktrees
+    depends_on:
+      - confirm-worktree-removal
+    when: "$confirm-worktree-removal.output.decision == 'reject'"
+    cancel: "Stopped before implementation: the worktree holding the feature branch was not removed."
+  - id: remove-worktrees
+    depends_on:
+      - confirm-worktree-removal
+    when: "$confirm-worktree-removal.output.decision == 'approve'"
+    bash: "set -euo pipefail\nB='feat/backend-token-calls'\nHELD=$(awk -v b=\"refs/heads/$B\" -v me=\"$(git rev-parse --show-toplevel)\" '$1==\"worktree\"{w=$2} $1==\"branch\" && $2==b && w!=me{print w}' <(git worktree list --porcelain))\nwhile IFS= read -r w; do [ -n \"$w\" ] && git worktree remove \"$w\" && echo \"removed $w\" >&2; done <<< \"$HELD\"\n"
   - id: start
-    bash: "set -euo pipefail\nexec 3>&1 1>&2\nB='feat/backend-token-calls'; M='main'; PR='plans'\ngit fetch origin \"$M\"\ngit fetch origin \"$PR\"\nPC=$(git rev-parse FETCH_HEAD)\nif git ls-remote --exit-code --heads origin \"$B\" >/dev/null 2>&1; then\n  git fetch origin \"$B\"\n  if git rev-parse --verify --quiet \"refs/heads/$B\" >/dev/null; then git switch \"$B\"; git merge --ff-only \"origin/$B\"; else git switch -c \"$B\" --track \"origin/$B\"; fi\nelif git rev-parse --verify --quiet \"refs/heads/$B\" >/dev/null; then git switch \"$B\"\nelse git switch -c \"$B\" \"origin/$M\"; fi\nprintf '{\"head\":\"%s\",\"plan_commit\":\"%s\"}\\n' \"$(git rev-parse HEAD)\" \"$PC\" >&3\n"
+    depends_on:
+      - worktree-check
+      - confirm-worktree-removal
+      - stop-at-worktrees
+      - remove-worktrees
+    trigger_rule: none_failed_min_one_success
+    bash: "set -euo pipefail\nexec 3>&1 1>&2\nB='feat/backend-token-calls'; M='main'; PR='plans'\ngit fetch origin \"$M\"\ngit fetch origin \"$PR\"\nPC=$(git rev-parse FETCH_HEAD)\nHELD=$(git worktree list --porcelain | awk -v b=\"refs/heads/$B\" -v me=\"$(git rev-parse --show-toplevel)\" '$1==\"worktree\"{w=$2} $1==\"branch\" && $2==b && w!=me{print w}')\nif [ -n \"$HELD\" ]; then echo \"devflow: branch $B is already checked out in another worktree: $HELD\" >&2; echo \"devflow: if no run is using it and it has nothing unpushed, remove it with: git worktree remove $HELD\" >&2; exit 1; fi\nif git ls-remote --exit-code --heads origin \"$B\" >/dev/null 2>&1; then\n  git fetch origin \"$B\"\n  if git rev-parse --verify --quiet \"refs/heads/$B\" >/dev/null; then git switch \"$B\"; git merge --ff-only \"origin/$B\"; else git switch -c \"$B\" --track \"origin/$B\"; fi\nelif git rev-parse --verify --quiet \"refs/heads/$B\" >/dev/null; then git switch \"$B\"\nelse git switch -c \"$B\" \"origin/$M\"; fi\nprintf '{\"head\":\"%s\",\"plan_commit\":\"%s\"}\\n' \"$(git rev-parse HEAD)\" \"$PC\" >&3\n"
     output_format:
       type: object
       properties:
