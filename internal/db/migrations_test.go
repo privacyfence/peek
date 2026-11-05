@@ -353,3 +353,21 @@ func TestMigration17CreatesProvisioningTables(t *testing.T) {
 		}
 	}
 }
+
+func TestMigration18AddsBackendTokenCalls(t *testing.T) {
+	path := migCovPrepare(t, 18, `DROP TABLE backend_token_calls`, `DROP TABLE upload_backend_settings`)
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	var n int
+	if err := s.QueryRow(`SELECT COUNT(*) FROM schema_migrations WHERE id=18`).Scan(&n); err != nil || n != 1 {
+		t.Fatalf("migration 18 recorded %d times (err %v)", n, err)
+	}
+	for _, table := range []string{"backend_token_calls", "upload_backend_settings"} {
+		if err := s.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?`, table).Scan(&n); err != nil || n != 1 {
+			t.Fatalf("table %s missing (err %v)", table, err)
+		}
+	}
+}
