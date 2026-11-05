@@ -52,6 +52,8 @@ type backendFlags struct {
 	data            string
 	dataSet         bool
 	headers         []string
+	output          string
+	yes             bool
 }
 
 func parseBackendFlags(args []string, allowed ...string) (backendFlags, error) {
@@ -75,6 +77,10 @@ func parseBackendFlags(args []string, allowed ...string) (backendFlags, error) {
 		}
 		if a == "--value-stdin" {
 			f.valueStdin = true
+			continue
+		}
+		if a == "--yes" {
+			f.yes = true
 			continue
 		}
 		if a == "--allow-token-calls" {
@@ -109,6 +115,8 @@ func parseBackendFlags(args []string, allowed ...string) (backendFlags, error) {
 		case "--data":
 			f.data = v
 			f.dataSet = true
+		case "-o":
+			f.output = v
 		case "-H":
 			f.headers = append(f.headers, v)
 		}
@@ -135,6 +143,8 @@ func cmdBackend(args []string) error {
 		return cmdBackendCall(args[1:])
 	case "token-calls":
 		return cmdBackendTokenCalls(args[1:])
+	case "data":
+		return cmdBackendData(args[1:])
 	}
 	return cmdBackendShow(args)
 }
