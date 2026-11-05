@@ -20,13 +20,19 @@ const apiTokenContextKey contextKey = "api-token"
 // the largest JSON body any handler accepts (defaultJSONBodyLimit).
 const maxRequestBodyBytes = defaultJSONBodyLimit
 
-// bodyLimitExempt reports whether r is an upload or a backend relay request,
-// whose handlers set their own MaxBytesReader.
+// bodyLimitExempt reports whether r is an upload, backend relay or token backend
+// relay request, whose handlers set their own MaxBytesReader.
 func bodyLimitExempt(r *http.Request) bool {
-	if strings.HasPrefix(r.URL.Path, "/svc/") {
+	p := r.URL.Path
+	if strings.HasPrefix(p, "/svc/") {
 		return true
 	}
-	return r.Method == http.MethodPost && (r.URL.Path == "/api/upload" || r.URL.Path == "/dashboard/upload")
+	if r.Method == http.MethodPost && (p == "/api/upload" || p == "/dashboard/upload") {
+		return true
+	}
+	seg := strings.Split(r.URL.EscapedPath(), "/") // "", "api", "uploads", slug, ...; escaped, as the mux matches it, so %2F in a slug cannot shift segments
+	// API-token backend relay; relayToBackend applies the 1 MiB limit.
+	return len(seg) >= 7 && seg[1] == "api" && seg[2] == "uploads" && seg[4] == "versions" && seg[6] == "svc"
 }
 
 func requestTooLargeError(w http.ResponseWriter, r *http.Request) {

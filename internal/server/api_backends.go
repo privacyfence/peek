@@ -48,6 +48,8 @@ type backendInfoOut struct {
 	Enabled  bool                `json:"enabled"`
 	Versions []backendVersionOut `json:"versions"`
 	Env      []backendEnvOut     `json:"env"`
+	// TokenCalls is whether API tokens may call the page's backend.
+	TokenCalls bool `json:"token_calls"`
 }
 
 // backendUpload loads the page named in the path and checks that the caller owns it or is an admin.
@@ -143,10 +145,16 @@ func (s *Server) handleGetBackend(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusInternalServerError, "db error")
 		return
 	}
+	tokenCalls, err := s.store.UploadBackendTokenCalls(r.Context(), u.ID)
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, "db error")
+		return
+	}
 	out := backendInfoOut{
-		Enabled:  s.backends != nil,
-		Versions: make([]backendVersionOut, 0, len(rows)),
-		Env:      make([]backendEnvOut, 0, len(vars)),
+		TokenCalls: tokenCalls,
+		Enabled:    s.backends != nil,
+		Versions:   make([]backendVersionOut, 0, len(rows)),
+		Env:        make([]backendEnvOut, 0, len(vars)),
 	}
 	for _, b := range rows {
 		out.Versions = append(out.Versions, s.backendVersionOut(b))
@@ -155,6 +163,30 @@ func (s *Server) handleGetBackend(w http.ResponseWriter, r *http.Request) {
 		out.Env = append(out.Env, backendEnvOut{Name: v.Name, UpdatedAt: v.UpdatedAt.Unix()})
 	}
 	jsonOK(w, out)
+}
+
+func (s *Server) handleSetBackendTokenCalls(w http.ResponseWriter, r *http.Request) {
+	owner, u, ok := s.backendUpload(w, r)
+	if !ok || !s.requireBackendsEnabled(w) {
+		return
+	}
+	var body struct {
+		Enabled *bool `json:"enabled"`
+	}
+	if err := decodeJSON(w, r, &body, smallJSONBodyLimit); err != nil {
+		jsonError(w, http.StatusBadRequest, "bad json")
+		return
+	}
+	if body.Enabled == nil {
+		jsonError(w, http.StatusBadRequest, "enabled must be true or false")
+		return
+	}
+	if err := s.store.SetUploadBackendTokenCalls(r.Context(), u.ID, *body.Enabled); err != nil {
+		jsonError(w, http.StatusInternalServerError, "db error")
+		return
+	}
+	s.auditRequest(r, owner.Name, "backend.token_calls", auditDetail("slug", u.Slug, "enabled", strconv.FormatBool(*body.Enabled)))
+	jsonOK(w, map[string]any{"status": "ok", "token_calls": *body.Enabled})
 }
 
 func (s *Server) handleSetBackend(w http.ResponseWriter, r *http.Request) {

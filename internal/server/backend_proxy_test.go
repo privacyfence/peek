@@ -357,3 +357,37 @@ func TestBackendProxyRateLimit(t *testing.T) {
 		t.Fatalf("request 241 = %d %s", last.Code, last.Body.String())
 	}
 }
+
+func TestBackendProxyCallerAndRelayHeaders(t *testing.T) {
+	tb := startTestBackend(t, nil)
+	s, _, _ := proxyFixture(t, "px-caller", models.UploadVisibilityPublic, tb)
+	rec := svcReq(t, s, http.MethodGet, "/svc/px-caller/v/1/api/x", nil)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("relay = %d %s", rec.Code, rec.Body.String())
+	}
+	if got := tb.seen().Header.Get("X-Peek-Caller"); got != "browser" {
+		t.Errorf("X-Peek-Caller = %q", got)
+	}
+	if got := rec.Header().Get("X-Peek-Relay"); got != "backend" {
+		t.Errorf("X-Peek-Relay = %q", got)
+	}
+	for _, path := range []string{"/svc/px-caller/v/2/api/x", "/svc/missing/v/1/api/x"} {
+		rec = svcReq(t, s, http.MethodGet, path, nil)
+		if rec.Code != http.StatusNotFound || rec.Header().Get("X-Peek-Relay") != "" {
+			t.Errorf("%s = %d relay=%q", path, rec.Code, rec.Header().Get("X-Peek-Relay"))
+		}
+	}
+	rs, _, _ := proxyFixture(t, "px-caller-r", models.UploadVisibilityRestricted, tb)
+	rec = svcReq(t, rs, http.MethodGet, "/svc/px-caller-r/v/1/api/x", nil)
+	if rec.Code != http.StatusUnauthorized || rec.Header().Get("X-Peek-Relay") != "" {
+		t.Errorf("denied = %d relay=%q", rec.Code, rec.Header().Get("X-Peek-Relay"))
+	}
+	acct, err := rs.store.CreateAccount(context.Background(), "nobody@example.test", "Nobody", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec = svcReq(t, rs, http.MethodGet, "/svc/px-caller-r/v/1/api/x", nil, asSession(rs, acct.ID))
+	if rec.Code != http.StatusForbidden || rec.Header().Get("X-Peek-Relay") != "" {
+		t.Errorf("forbidden = %d relay=%q", rec.Code, rec.Header().Get("X-Peek-Relay"))
+	}
+}
