@@ -320,6 +320,7 @@ func TestBackendAPIWritesAuditActions(t *testing.T) {
 		{http.MethodPut, base + "/backend/env/FOO", `{"value":"x"}`, "backend.env.set"},
 		{http.MethodDelete, base + "/backend/env/FOO", "", "backend.env.unset"},
 		{http.MethodPost, base + "/backend/restart", "", "backend.restart"},
+		{http.MethodPut, base + "/backend/token-calls", `{"enabled":true}`, "backend.token_calls"},
 		{http.MethodDelete, base + "/versions/1/backend", "", "backend.remove"},
 	}
 	for _, st := range steps {
@@ -340,6 +341,9 @@ func TestBackendAPIWritesAuditActions(t *testing.T) {
 		if !ok || !strings.Contains(d, "slug=b-audit") {
 			t.Errorf("audit %s missing or without slug: %q", st.action, d)
 		}
+	}
+	if d := details["backend.token_calls"]; !strings.Contains(d, "enabled=true") {
+		t.Errorf("backend.token_calls detail = %q", d)
 	}
 	if d := details["backend.set"]; !strings.Contains(d, "version=1") || !strings.Contains(d, "image="+backendTestImage) || !strings.Contains(d, "port=8080") {
 		t.Errorf("backend.set detail = %q", d)
@@ -376,5 +380,62 @@ func TestBackendAPIDisabledServer(t *testing.T) {
 	}
 	if code, _ := backendReq(t, s, http.MethodGet, base+"/versions/1/backend/logs", adminTok, ""); code != http.StatusNotFound {
 		t.Fatalf("logs when off: %d", code)
+	}
+}
+
+func TestBackendAPITokenCalls(t *testing.T) {
+	s, u, tok := backendFixture(t, "b-tcalls")
+	base := "/api/uploads/" + u.Slug
+	newAccountWithToken(t, s, "admin@example.test", "admin-tok", true)
+	newAccountWithToken(t, s, "other@example.test", "other-tok", false)
+
+	getFlag := func() bool {
+		code, b := backendReq(t, s, http.MethodGet, base+"/backend", tok, "")
+		if code != http.StatusOK {
+			t.Fatalf("GET backend = %d %s", code, b)
+		}
+		var out backendInfoOut
+		if err := json.Unmarshal([]byte(b), &out); err != nil {
+			t.Fatal(err)
+		}
+		return out.TokenCalls
+	}
+	if getFlag() {
+		t.Fatal("token_calls on by default")
+	}
+	if code, b := backendReq(t, s, http.MethodPut, base+"/backend/token-calls", tok, `{"enabled":true}`); code != http.StatusOK || b != `{"status":"ok","token_calls":true}` {
+		t.Fatalf("owner PUT = %d %s", code, b)
+	}
+	if !getFlag() {
+		t.Fatal("token_calls not on after PUT")
+	}
+	if code, b := backendReq(t, s, http.MethodPut, base+"/backend/token-calls", "admin-tok", `{"enabled":false}`); code != http.StatusOK || b != `{"status":"ok","token_calls":false}` {
+		t.Fatalf("admin PUT = %d %s", code, b)
+	}
+	if getFlag() {
+		t.Fatal("token_calls still on")
+	}
+	if code, b := backendReq(t, s, http.MethodPut, base+"/backend/token-calls", "other-tok", `{"enabled":true}`); code != http.StatusForbidden || !strings.Contains(b, "not owner") {
+		t.Fatalf("other PUT = %d %s", code, b)
+	}
+	if code, b := backendReq(t, s, http.MethodPut, base+"/backend/token-calls", tok, `{`); code != http.StatusBadRequest || !strings.Contains(b, "bad json") {
+		t.Fatalf("bad json = %d %s", code, b)
+	}
+	if code, b := backendReq(t, s, http.MethodPut, base+"/backend/token-calls", tok, `{}`); code != http.StatusBadRequest || !strings.Contains(b, "enabled must be true or false") {
+		t.Fatalf("empty = %d %s", code, b)
+	}
+	if _, err := s.store.Exec(`DROP TABLE upload_backend_settings`); err != nil {
+		t.Fatal(err)
+	}
+	if code, b := backendReq(t, s, http.MethodPut, base+"/backend/token-calls", tok, `{"enabled":true}`); code != http.StatusInternalServerError || !strings.Contains(b, "db error") {
+		t.Fatalf("db error PUT = %d %s", code, b)
+	}
+	if code, b := backendReq(t, s, http.MethodGet, base+"/backend", tok, ""); code != http.StatusInternalServerError || !strings.Contains(b, "db error") {
+		t.Fatalf("db error GET = %d %s", code, b)
+	}
+
+	off, offTok := newHandlerTestServer(t)
+	if code, b := backendReq(t, off, http.MethodPut, "/api/uploads/any/backend/token-calls", offTok, `{"enabled":true}`); code != http.StatusConflict && code != http.StatusNotFound {
+		t.Fatalf("backends off = %d %s", code, b)
 	}
 }
